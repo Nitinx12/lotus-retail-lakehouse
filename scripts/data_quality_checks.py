@@ -26,10 +26,15 @@ if PROJECT_ROOT not in sys.path:
 
 from sqlalchemy import text
 
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+
 from utils.db import get_engine
 from utils.logger import get_logger
 
 log = get_logger("data_quality_checks")
+console = Console()
 
 RAW_TABLE = os.getenv("TABLE_NAME", "bookings")  # matches incremental.py's TABLE_NAME
 
@@ -215,6 +220,7 @@ HARD_CHECKS = [
 
 def main():
     engine = get_engine()
+    console.print(Panel("Running data quality checks...", border_style="cyan"))
     log.info("Running data quality checks...")
 
     results = []
@@ -230,18 +236,28 @@ def main():
 
     failed = [r for r in results if not r[1]]
 
-    print("\n" + "=" * 60)
-    print(" DATA QUALITY SUMMARY")
-    print("=" * 60)
+    table = Table(title="Data Quality Summary", show_lines=False)
+    table.add_column("Check")
+    table.add_column("Result", justify="center")
+    table.add_column("Detail", overflow="fold", style="dim")
     for name, passed, detail in results:
-        print(f" [{'PASS' if passed else 'FAIL'}] {name}")
-    print("=" * 60)
+        status = "[bold green]PASS[/bold green]" if passed else "[bold red]FAIL[/bold red]"
+        table.add_row(name, status, detail)
+    console.print(table)
 
     if failed:
         log.error(f"{len(failed)} of {len(results)} checks FAILED.")
+        console.print(Panel(
+            f"{len(failed)} of {len(results)} checks FAILED.",
+            title="Result", border_style="red",
+        ))
         sys.exit(1)
 
     log.info(f"All {len(results)} data quality checks passed.")
+    console.print(Panel(
+        f"All {len(results)} data quality checks passed.",
+        title="Result", border_style="green",
+    ))
     sys.exit(0)
 
 
