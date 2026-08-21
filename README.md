@@ -1,15 +1,14 @@
-<h1>
-  <img src="assets/kimball_architecture.png" width="70" align="left"/>
-  UBER: Kimball Architecture
-</h1>
+<div align="center">
 
-<br clear="left"/>
+![Tech Stack](https://skillicons.dev/icons?i=mongodb,postgres,py,git,github,powershell)
 
-<p align="center">
-  <img src="https://skillicons.dev/icons?i=git,github,powershell,python,docker" alt="Git, GitHub, PowerShell, Python, Docker"/>
-</p>
+# UBER: Kimball Architecture
 
 A Postgres pipeline that loads a raw ride booking CSV and builds a Kimball style star schema for analytics. One row in `fact_bookings` equals one booking. Docker, the loader, and the quality tests all exist to get data into that model safely and keep it trustworthy.
+
+<img src="assets/kimball_architecture.png" alt="PySpark" width="240" />
+
+</div>
 
 ## Data Flow
 
@@ -32,7 +31,7 @@ Prerequisites: Git and Docker Desktop.
 
 1. Clone the repo:
    ```bash
-   git clone <repository_url>
+   git clone https://github.com/Nitinx12/Data_Modeling
    cd UBER
    ```
 2. Create a `.env` file inside `docker/`, next to `compose.yml`:
