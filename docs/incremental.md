@@ -1,147 +1,56 @@
-# Incremental Bookings Loader
+# The Incremental Loader
 
-Loads `Bookings.csv` into a Postgres table, skipping any rows that were already loaded in a previous run. Safe to re-run as many times as you want — it will never create duplicate rows.
+This explains what `scripts/incremental.py` does and why it is safe to run again and again.
 
-## Folder structure
+## 1. What it does, in one sentence
 
-```
-C:\UBER\
-├── scripts\
-│   └── incremental.py       <- main script
-├── utils\
-│   ├── __init__.py
-│   └── logger.py            <- shared logging setup
-├── logs\                    <- log files land here automatically
-├── .env                     <- Postgres + CSV config
-└── requirements.txt
-```
+It copies rows from `Bookings.csv` into the Postgres table `bookings`, and skips any row that is already there.
 
-## How the incremental logic works
+## 2. Why it is called incremental
 
-The core idea: **`Booking_ID` is the table's PRIMARY KEY.**
+`Booking_ID` is the table's primary key. Every load runs an insert that says "add this row, but if a row with this ID already exists, do nothing." So if you run the script daily on a refreshed CSV, only the rows that are actually new get added. Run it twice on the same file and the second run adds nothing, it just confirms everything is already there.
 
-1. On first run, the script reads the CSV, infers a column type for each field, and creates the table (`CREATE TABLE IF NOT EXISTS`) with `Booking_ID` set as `PRIMARY KEY`.
-2. On every run (first or later), the CSV is read in chunks (default 5,000 rows) to keep memory usage low even on large files.
-3. Each chunk is written to a temporary **staging table** in Postgres.
-4. The script then runs:
-   ```sql
-   INSERT INTO bookings (...)
-   SELECT ... FROM _staging_bookings
-   ON CONFLICT (Booking_ID) DO NOTHING;
-   ```
-   - If a `Booking_ID` **already exists** in `bookings`, Postgres silently skips that row.
-   - If a `Booking_ID` is **new**, it gets inserted.
-5. The staging table is dropped after each chunk.
+## 3. What happens on each run
 
-This means:
-- You can drop a fresh `Bookings.csv` (with old + new rows mixed together) in the same file path and re-run the script — only the genuinely new bookings get added.
-- No separate "last processed ID" or timestamp tracking is needed, because Postgres itself enforces uniqueness on `Booking_ID`.
-
-## Config (`.env`)
-
-```dotenv
-# Postgres configuration
-POSTGRES_HOST=your_host
-POSTGRES_PORT=your_port
-POSTGRES_DATABASE=your_database
-POSTGRES_USERNAME=your_username
-POSTGRES_PASSWORD=your_password
-
-# Source CSV and target table
-CSV_FILE_PATH=path\to\your\Bookings.csv
-TABLE_NAME=bookings
-CHUNK_SIZE=5000
+```mermaid
+flowchart TD
+    A[Read the whole CSV once] --> B{Does the bookings table exist yet}
+    B -->|No| C[Create it]
+    B -->|Yes| D[Check its column types still match the CSV]
+    D -->|Mismatch found| E[Fix the column automatically]
+    D -->|Matches| F[Continue]
+    C --> F
+    E --> F
+    F --> G[Split rows into batches]
+    G --> H[Insert each batch, skip rows already present]
+    H --> I[Write a summary: rows read, added, skipped]
 ```
 
-| Variable | Purpose | Default |
-|---|---|---|
-| `POSTGRES_HOST/PORT/DATABASE/USERNAME/PASSWORD` | DB connection | — |
-| `CSV_FILE_PATH` | Path to the source CSV | hardcoded fallback path in script |
-| `TABLE_NAME` | Target table name | `bookings` |
-| `CHUNK_SIZE` | Rows read/inserted per batch | `5000` |
+## 4. Why the CSV is read in one pass, not in chunks
 
-## Running it
+An earlier version read the CSV in chunks and let pandas guess each column's type separately per chunk. A column that is often blank, like `Time`, could come out as one type in an early chunk and a different type in a later one, which made Postgres reject the load with a type mismatch. Reading the whole file once first settles on a single, correct type per column before anything is written. The chunking that still happens later is only about how many rows get inserted per database call, it no longer affects what type each column is read as.
 
-Using `uv`:
+## 5. Self healing an existing table
 
-```powershell
-cd C:\UBER
-uv pip install -r requirements.txt
-uv run scripts\incremental.py
-```
+If an older run already created `bookings` with a column set to the wrong type, the loader checks the live table against the correct schema before inserting anything, and fixes any mismatched column on its own instead of failing. It prints exactly what it changed, so nothing happens silently.
 
-If you'd rather manage dependencies via `pyproject.toml` instead of `requirements.txt`:
+## 6. What a run looks like day to day
 
-```powershell
-uv add pandas sqlalchemy psycopg2-binary python-dotenv
-uv run scripts\incremental.py
-```
+* CSV has no new rows: every row is already in the table, so the run inserts zero and skips everything, no duplicates.
+* CSV has new rows: only those new rows get inserted.
+* Safe to put on a schedule, cron, Airflow, or anything similar, since running it repeatedly never causes duplicates or errors.
 
-`uv run` automatically uses the project's `.venv`, so there's no need to manually activate it first.
+## 7. Configuration
 
-The script also adds the project root to `sys.path` automatically, so it works no matter what your current directory is when you run it — `utils/logger.py` will always be found.
+Everything is read from a `.env` file next to the script.
 
-## What you'll see: the summary block
-
-At the end of every run, both printed to console and written to the log file:
-
-```
-==================================================
- LOAD SUMMARY
-==================================================
- Table                 : bookings
- Rows in table before  : 100000
- Rows read from CSV    : 100500
- Rows newly inserted   : 500
- Rows skipped (dupes)  : 100000
- Rows in table after   : 100500
- Duration              : 3.42 sec
-==================================================
-```
-
-| Field | Meaning |
+| Setting | What it controls |
 |---|---|
-| Rows in table before | `COUNT(*)` in Postgres before this run started |
-| Rows read from CSV | Total rows pulled out of the CSV file |
-| Rows newly inserted | New `Booking_ID`s that got added this run |
-| Rows skipped (dupes) | Rows whose `Booking_ID` already existed |
-| Rows in table after | `COUNT(*)` in Postgres after the run finished |
-| Duration | Wall-clock time for the whole run |
+| `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DATABASE`, `POSTGRES_USERNAME`, `POSTGRES_PASSWORD` | how to connect to Postgres |
+| `CSV_FILE_PATH` | where `Bookings.csv` lives |
+| `TABLE_NAME` | the target table, `bookings` by default |
+| `CHUNK_SIZE` | how many rows go into each insert batch, `5000` by default |
 
-## Logging (`utils/logger.py`)
+## 8. What you see when it runs
 
-- Every run writes to **both** the console and a file under `logs/`.
-- One log file per day: `logs/incremental_loader_YYYY-MM-DD.log`.
-- Files auto-rotate at 5 MB (keeps up to 5 backups), so `logs/` never grows unbounded.
-- Log format:
-  ```
-  2026-07-28 14:32:10 | INFO | incremental_loader | Chunk done: read=5000, newly_inserted=120
-  ```
-
-## Audit trail in Postgres (`etl_load_log` table)
-
-Separately from the log files, every run also inserts one row into an `etl_load_log` table:
-
-| Column | Description |
-|---|---|
-| `run_at` | Timestamp of the run |
-| `rows_read` | Rows read from CSV |
-| `rows_inserted` | New rows inserted |
-| `rows_skipped` | Duplicate rows skipped |
-| `source_file` | Path of the CSV used |
-
-Query it any time to see load history:
-```sql
-SELECT * FROM etl_load_log ORDER BY run_at DESC;
-```
-
-## Troubleshooting
-
-**`ModuleNotFoundError: No module named 'utils'`**
-Happens if `utils/` isn't a sibling of the project root the script auto-detects (parent of `scripts/`). Confirm the folder tree matches the layout above — `utils/` and `logs/` should sit directly under `C:\UBER\`, not inside `scripts\`.
-
-**`Key column 'Booking_ID' not found in CSV columns`**
-The CSV header must literally be `Booking_ID` (case-sensitive) after underscores replace spaces. Check the first row of `Bookings.csv`.
-
-**Table already exists with different columns**
-The script only runs `CREATE TABLE IF NOT EXISTS` — it won't alter an existing table's schema. If your CSV's columns change, drop/recreate the table manually or add a migration step.
+The script prints a small banner, a progress bar while it loads, and a summary panel at the end showing rows in the table before the run, rows read from the CSV, rows newly added, rows skipped, and rows in the table after. Every run also writes a row to an `etl_load_log` table in Postgres, so there is a permanent record of every load: when it ran, how many rows it read, and how many were actually new.
