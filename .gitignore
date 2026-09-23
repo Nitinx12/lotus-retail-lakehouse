@@ -1,50 +1,84 @@
 # =========================
-# Environment
+# Environment & Secrets
 # =========================
 .env
 .env.*
 !.env.example
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+secrets.yaml
+secrets.yml
+secrets.toml
+secrets.json
+credentials.json
+service_account.json
+token.json
+.secrets/
+secrets/
+credentials/
+
 .venv/
 venv/
 env/
+ENV/
 
 # =========================
 # Python
 # =========================
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
+*$py.class
+*.so
 *.egg-info/
+*.egg
+.eggs/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# Ignore all __init__.py files (NOT RECOMMENDED)
-**/__init__.py
+.coverage
+htmlcov/
+.tox/
 
 # =========================
-# Logs
+# Logs & Data (never commit raw data or run logs)
 # =========================
 logs/
 *.log
+data/
+*.csv
+*.parquet
+*.pkl
+*.pickle
+notebooks/.ipynb_checkpoints/
+notebooks/*.csv
 
 # =========================
 # Jupyter
 # =========================
 .ipynb_checkpoints/
+*.ipynb_checkpoints
 
 # =========================
 # IDE
 # =========================
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # =========================
 # OS Files
 # =========================
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # =========================
 # Temporary Files
@@ -53,11 +87,15 @@ Thumbs.db
 *.temp
 *.bak
 *.cache
+*.pid
+*.seed
+*.pid.lock
 
 # =========================
 # Database
 # =========================
 *.db
+*.sqlite
 *.sqlite3
 
 # =========================
@@ -65,3 +103,5 @@ Thumbs.db
 # =========================
 build/
 dist/
+*.whl
+*.tar.gz
