@@ -1,0 +1,13 @@
+[project]
+name = "ola"
+version = "0.1.0"
+description = "OLA ride booking pipeline — Kimball star schema on Postgres/MongoDB/Databricks"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "databricks-sql-connector>=4.5.0",
+    "dotenv>=0.9.9",
+    "psycopg2>=2.9.13",
+    "pymongo>=4.18.1",
+    "sqlalchemy>=2.0.54",
+]
