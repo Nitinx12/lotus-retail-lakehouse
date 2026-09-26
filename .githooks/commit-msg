@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# rejects a commit message that breaks the house style
+set -euo pipefail
+
+msg_file="$1"
+first_line=$(head -n1 "$msg_file")
+
+if [[ "$first_line" =~ ^[A-Z] ]]; then
+  echo "commit message must start lower case"
+  exit 1
+fi
+
+if [[ "$first_line" =~ \.$ ]]; then
+  echo "commit message must not end with a period"
+  exit 1
+fi

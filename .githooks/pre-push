@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# blocks a direct push to main and runs the test suite first
+set -euo pipefail
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+if [[ "$branch" == "main" ]]; then
+  echo "direct push to main is not allowed, open a pr from a branch"
+  exit 1
+fi
+
+uv run pytest -q

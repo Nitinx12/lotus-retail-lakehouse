@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# blocks the commit if lint, formatting, or a staged secret fails the check
+set -euo pipefail
+
+uv run ruff check .
+uv run ruff format --check .
+
+sql_files=$(git diff --cached --name-only -- '*.sql' || true)
+if [[ -n "$sql_files" ]]; then
+  uv run sqlfluff lint $sql_files
+fi
+
+if git diff --cached --name-only | grep -qx '\.env'; then
+  echo ".env is staged, remove it before committing"
+  exit 1
+fi
+
+md_files=$(git diff --cached --name-only -- '*.md' || true)
+if [[ -n "$md_files" ]] && grep -nE '[a-zA-Z]-[a-zA-Z]' $md_files > /dev/null 2>&1; then
+  echo "warning: possible hyphen in prose in: $md_files"
+fi

@@ -1,107 +1,30 @@
-# =========================
-# Environment & Secrets
-# =========================
-.env
-.env.*
-!.env.example
-*.env
-*.pem
-*.key
-*.p12
-*.pfx
-*.crt
-*.csr
-secrets.yaml
-secrets.yml
-secrets.toml
-secrets.json
-credentials.json
-service_account.json
-token.json
-.secrets/
-secrets/
-credentials/
-
-.venv/
-venv/
-env/
-ENV/
-
-# =========================
+# ==========================
 # Python
-# =========================
+# ==========================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-*.egg-info/
-*.egg
-.eggs/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
-.tox/
+.pyre/
 
-# =========================
-# Logs & Data (never commit raw data or run logs)
-# =========================
-logs/
-*.log
-data/
-*.csv
-*.parquet
-*.pkl
-*.pickle
-notebooks/.ipynb_checkpoints/
-notebooks/*.csv
+# ==========================
+# Virtual Environments
+# ==========================
+.venv/
+venv/
+env/
+ENV/
+.venv_old
 
-# =========================
-# Jupyter
-# =========================
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-
-# =========================
-# IDE
-# =========================
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# =========================
-# OS Files
-# =========================
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# =========================
-# Temporary Files
-# =========================
-*.tmp
-*.temp
-*.bak
-*.cache
-*.pid
-*.seed
-*.pid.lock
-
-# =========================
-# Database
-# =========================
-*.db
-*.sqlite
-*.sqlite3
-
-# =========================
-# Build / Distribution
-# =========================
-build/
-dist/
-*.whl
-*.tar.gz
+# ==========================
+# Environment Variables
+# ==========================
+.env
+.env.*
+!.env.example
