@@ -7,6 +7,13 @@ requires-python = ">=3.13"
 dependencies = [
   "kagglehub[pandas-datasets]",
   "pandas",
+  "psycopg2-binary",
   "pymongo",
   "python-dotenv",
+  "pytest",
+  "ruff",
+  "sqlalchemy",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
