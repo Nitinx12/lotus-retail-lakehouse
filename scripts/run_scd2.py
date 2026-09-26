@@ -51,11 +51,13 @@ def version_dim(
     natural_key: str,
     tracked: list[str],
     sk_col: str,
-    business_date: str,
+    anchor_date: str,
+    change_date: str,
 ) -> pd.DataFrame:
     path = SILVER_DIR / f"{table}_scd2.parquet"
     current = pd.read_parquet(path) if path.exists() else None
-    out = apply_scd2(current, frame, natural_key, tracked, sk_col, business_date)
+    start = anchor_date if current is None else change_date
+    out = apply_scd2(current, frame, natural_key, tracked, sk_col, start)
     out.to_parquet(path, index=False)
     versions = int((~out["is_current"]).sum())
     cur.execute(
@@ -69,8 +71,10 @@ def version_dim(
 # versions both type 2 dimensions
 def main() -> None:
     run_id = str(uuid.uuid4())
-    business_date = datetime.now(UTC).date().isoformat()
-    log.info("scd2 start run=%s date=%s", run_id, business_date)
+    orders = pd.read_parquet(SILVER_DIR / "fact_orders.parquet")
+    anchor_date = pd.to_datetime(orders["order_date"]).min().date().isoformat()
+    change_date = datetime.now(UTC).date().isoformat()
+    log.info("scd2 start run=%s anchor=%s", run_id, anchor_date)
     with ops_conn() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
@@ -83,7 +87,8 @@ def main() -> None:
                 "customer_id",
                 ["region", "loyalty_tier", "city"],
                 "customer_sk",
-                business_date,
+                anchor_date,
+                change_date,
             )
             employees = pd.read_parquet(SILVER_DIR / "dim_employees.parquet")
             version_dim(
@@ -94,7 +99,8 @@ def main() -> None:
                 "employee_id",
                 ["store_id", "role"],
                 "employee_sk",
-                business_date,
+                anchor_date,
+                change_date,
             )
             cur.execute(
                 "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out) VALUES (%s, %s, %s, %s, %s)",
