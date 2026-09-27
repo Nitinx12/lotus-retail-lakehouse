@@ -97,13 +97,13 @@ def silver_suite() -> dict[str, int | list[str]]:
 
 
 # checks gold keys and mart reconciliation
-def gold_suite() -> dict[str, int | list[str]]:
-    facts = pd.read_parquet(GOLD_DIR / "fact_orders.parquet")
-    customers = pd.read_parquet(GOLD_DIR / "dim_customers.parquet")
-    employees = pd.read_parquet(GOLD_DIR / "dim_employees.parquet")
-    returns = pd.read_parquet(GOLD_DIR / "fact_returns.parquet")
-    revenue = pd.read_parquet(GOLD_DIR / "mart_revenue_by_store_month.parquet")
-    current_emp = employees[employees["is_current"]]
+def gold_checks(
+    facts: pd.DataFrame,
+    customers: pd.DataFrame,
+    employees: pd.DataFrame,
+    returns: pd.DataFrame,
+    revenue: pd.DataFrame,
+) -> dict[str, int | list[str]]:
     named = facts[facts["employee_id"].notna()]
     return {
         "customer_sk_covered": check_not_null(facts, ["customer_sk"])["customer_sk"],
@@ -111,13 +111,23 @@ def gold_suite() -> dict[str, int | list[str]]:
             facts, "customer_id", customers, "customer_id"
         ),
         "employees_fk": check_referential(
-            named, "employee_id", current_emp, "employee_id"
+            named, "employee_id", employees, "employee_id"
         ),
         "returns_sk": check_not_null(returns, ["customer_sk"])["customer_sk"],
         "mart_reconciled": 0
         if round(revenue["revenue"].sum(), 2) == round(facts["total_revenue"].sum(), 2)
         else 1,
     }
+
+
+# loads gold frames and checks keys and mart reconciliation
+def gold_suite() -> dict[str, int | list[str]]:
+    facts = pd.read_parquet(GOLD_DIR / "fact_orders.parquet")
+    customers = pd.read_parquet(GOLD_DIR / "dim_customers.parquet")
+    employees = pd.read_parquet(GOLD_DIR / "dim_employees.parquet")
+    returns = pd.read_parquet(GOLD_DIR / "fact_returns.parquet")
+    revenue = pd.read_parquet(GOLD_DIR / "mart_revenue_by_store_month.parquet")
+    return gold_checks(facts, customers, employees, returns, revenue)
 
 
 # runs all three suites and blocks on failure
