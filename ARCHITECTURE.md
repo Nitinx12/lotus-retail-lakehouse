@@ -74,12 +74,16 @@ One Delta table per Mongo collection, read with the Mongo Spark connector:
 ```python
 df = (
     spark.read.format("mongodb")
-    .option("connection.uri", mongo_uri)  # resolved from Airflow Connection / secrets backend
+    .option(
+        "connection.uri", mongo_uri
+    )  # resolved from Airflow Connection / secrets backend
     .option("database", "lotus_retail")
     .option("collection", "dim_customers")
     .load()
 )
-df.write.format("delta").option("mergeSchema", "true").mode("overwrite").saveAsTable("bronze.dim_customers")
+df.write.format("delta").option("mergeSchema", "true").mode("overwrite").saveAsTable(
+    "bronze.dim_customers"
+)
 ```
 
 `mergeSchema` matters here specifically because Mongo documents do not enforce a fixed shape the way a relational table does, a future load with an extra field should not break the pipeline. Any schema change gets logged to `ops.schema_changes` (table, column, change type, detected at) so it shows up in the monitoring page rather than silently changing downstream behavior.
