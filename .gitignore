@@ -37,6 +37,14 @@ logs/
 reports/
 
 # ==========================
+# dbt
+# ==========================
+dbt/target/
+dbt/dbt_packages/
+dbt/.user.yml
+dbt/logs/
+
+# ==========================
 # R
 # ==========================
 .Rproj.user

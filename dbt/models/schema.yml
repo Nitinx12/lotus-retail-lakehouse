@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: revenue_by_store_month
+    columns:
+      - name: store_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('gold', 'dim_stores')
+                field: store_id
+      - name: month
+        tests:
+          - not_null
+      - name: revenue
+        tests:
+          - not_null
+
+  - name: return_rate_by_product
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: source('gold', 'dim_products')
+                field: product_id
+      - name: return_rate
+        tests:
+          - not_null
+
+  - name: ramadan_seasonality
+    columns:
+      - name: month
+        tests:
+          - not_null
+      - name: revenue
+        tests:
+          - not_null

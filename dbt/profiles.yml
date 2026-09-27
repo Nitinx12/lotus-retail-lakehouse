@@ -1,0 +1,30 @@
+lotus:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_GOLD_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_GOLD_PORT', '5432') | int }}"
+      user: "{{ env_var('POSTGRES_GOLD_USER', 'lotus_app') }}"
+      pass: "{{ env_var('POSTGRES_GOLD_PASSWORD', '') }}"
+      dbname: "{{ env_var('POSTGRES_GOLD_DB', 'lotus_gold_dev') }}"
+      schema: marts
+      threads: 4
+    staging:
+      type: postgres
+      host: "{{ env_var('POSTGRES_GOLD_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_GOLD_PORT', '5432') | int }}"
+      user: "{{ env_var('POSTGRES_GOLD_USER', 'lotus_app') }}"
+      pass: "{{ env_var('POSTGRES_GOLD_PASSWORD', '') }}"
+      dbname: "{{ env_var('POSTGRES_GOLD_STAGING_DB', 'lotus_gold_staging') }}"
+      schema: marts
+      threads: 4
+    prod:
+      type: postgres
+      host: "{{ env_var('POSTGRES_GOLD_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_GOLD_PORT', '5432') | int }}"
+      user: "{{ env_var('POSTGRES_GOLD_USER', 'lotus_app') }}"
+      pass: "{{ env_var('POSTGRES_GOLD_PASSWORD', '') }}"
+      dbname: "{{ env_var('POSTGRES_GOLD_PROD_DB', 'lotus_gold_prod') }}"
+      schema: marts
+      threads: 4

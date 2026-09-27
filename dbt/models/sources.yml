@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: gold
+    schema: gold
+    tables:
+      - name: dim_date
+      - name: dim_stores
+      - name: dim_products
+      - name: dim_customers
+      - name: dim_employees
+      - name: fact_orders
+      - name: fact_returns
+      - name: fact_order_details
