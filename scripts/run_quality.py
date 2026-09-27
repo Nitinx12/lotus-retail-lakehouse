@@ -167,6 +167,7 @@ def main() -> None:
                 )
             except Exception as exc:
                 finish_run(cur, run_id, "quality", "failed", 0, 0, str(exc))
+                conn.commit()
                 raise
     print(f"quality done run={run_id} blocked={blocked}")
     if blocked:

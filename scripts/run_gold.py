@@ -96,6 +96,7 @@ def main() -> None:
                 finish_run(cur, run_id, "gold", "success", len(orders), len(facts))
             except Exception as exc:
                 finish_run(cur, run_id, "gold", "failed", 0, 0, str(exc))
+                conn.commit()
                 raise
     print(f"gold done run={run_id}")
 

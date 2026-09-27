@@ -159,6 +159,7 @@ def main() -> None:
                 record_run(cur, run_id, "bronze", "success", total, total, None)
             except Exception as exc:
                 record_run(cur, run_id, "bronze", "failed", total, total, str(exc))
+                conn.commit()
                 raise
     log.info("bronze done total=%s run=%s", total, run_id)
     print(f"bronze done total={total} run={run_id}")

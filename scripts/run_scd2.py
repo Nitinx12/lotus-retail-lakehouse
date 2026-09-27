@@ -115,6 +115,7 @@ def main() -> None:
                 )
             except Exception as exc:
                 finish_run(cur, run_id, "scd2", "failed", 0, 0, str(exc))
+                conn.commit()
                 raise
     print(f"scd2 done run={run_id}")
 
