@@ -74,6 +74,9 @@ def main() -> None:
             ensure_role(conn, user, pw)
         ensure_database(conn, gold_db, gold_user)
         ensure_database(conn, ops_db, ops_user)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(read_sql("sql/security/roles.sql"))
     finally:
         conn.close()
 
@@ -94,6 +97,18 @@ def main() -> None:
                 "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out) VALUES (%s, %s, %s, %s, %s)",
                 (run_id, "ops_init", "success", 0, 0),
             )
+    gold_dsn = build_dsn(
+        os.getenv("POSTGRES_OPS_HOST", "localhost"),
+        int(os.getenv("POSTGRES_OPS_PORT", "5432")),
+        gold_db,
+        gold_user,
+        gold_pw,
+    )
+    with psycopg2.connect(dsn=gold_dsn, connect_timeout=5) as g:
+        g.autocommit = True
+        with g.cursor() as cur:
+            for name in ("masked_views.sql", "grants.sql"):
+                cur.execute(read_sql(f"sql/security/{name}"))
     print(f"ops ready in {ops_db} run {run_id}")
 
 
