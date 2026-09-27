@@ -60,6 +60,49 @@ def test_build_fact_orders() -> None:
     assert out["employee_sk"].iloc[0] == 7
 
 
+# checks orders survive when no employee version covers the date
+def test_build_fact_orders_keeps_unresolved_employee() -> None:
+    orders = pd.DataFrame(
+        [
+            {
+                "order_id": "o1",
+                "customer_id": "a",
+                "employee_id": "e1",
+                "order_date": "2024-01-15",
+                "total_revenue": 10.0,
+                "total_cost": 5.0,
+                "store_id": 1,
+            }
+        ]
+    )
+    customers = pd.DataFrame(
+        [
+            {
+                "customer_id": "a",
+                "customer_sk": 1,
+                "region": "R1",
+                "effective_start_date": "2024-01-01",
+                "effective_end_date": None,
+                "is_current": True,
+            }
+        ]
+    )
+    employees = pd.DataFrame(
+        [
+            {
+                "employee_id": "e1",
+                "employee_sk": 7,
+                "effective_start_date": "2024-06-01",
+                "effective_end_date": None,
+            }
+        ]
+    )
+    out = build_fact_orders(orders, customers, employees)
+    assert len(out) == 1
+    assert out["customer_sk"].iloc[0] == 1
+    assert pd.isna(out["employee_sk"].iloc[0])
+
+
 # checks returns inherit order keys
 def test_build_fact_returns() -> None:
     rets = pd.DataFrame([{"return_id": "r1", "order_id": "o1"}])

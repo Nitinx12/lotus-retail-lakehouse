@@ -11,7 +11,6 @@ def build_fact_orders(
     orders: pd.DataFrame, customers: pd.DataFrame, employees: pd.DataFrame
 ) -> pd.DataFrame:
     out = asof_join(orders, customers, "customer_id", "customer_sk", "order_date")
-    out = out.rename(columns={"customer_sk": "customer_sk"})
     emp = employees[
         ["employee_id", "employee_sk", "effective_start_date", "effective_end_date"]
     ].copy()
@@ -19,18 +18,24 @@ def build_fact_orders(
     emp["effective_end_date"] = pd.to_datetime(
         emp["effective_end_date"], errors="coerce"
     )
-    out["_fdate"] = pd.to_datetime(out["order_date"])
-    out = out.merge(emp, on="employee_id", how="left", suffixes=("", "_emp"))
-    active = (out["effective_start_date_emp"] <= out["_fdate"]) & (
-        out["effective_end_date_emp"].isna()
-        | (out["_fdate"] < out["effective_end_date_emp"])
+    out["_fdate"] = pd.to_datetime(out["order_date"], errors="coerce")
+    out["_pos"] = range(len(out))
+    merged = out.merge(emp, on="employee_id", how="left", suffixes=("", "_emp"))
+    active = (merged["effective_start_date_emp"] <= merged["_fdate"]) & (
+        merged["effective_end_date_emp"].isna()
+        | (merged["_fdate"] < merged["effective_end_date_emp"])
     )
-    out = (
-        out[active | out["employee_sk"].isna()]
-        .drop(columns=["_fdate"])
-        .reset_index(drop=True)
+    matched = merged[active | merged["employee_sk"].isna()]
+    missing = out[~out["_pos"].isin(matched["_pos"])].merge(
+        emp.iloc[0:0], on="employee_id", how="left", suffixes=("", "_emp")
     )
-    return out
+    return pd.concat(
+        [
+            matched.drop(columns=["_fdate", "_pos"]),
+            missing.drop(columns=["_fdate", "_pos"]),
+        ],
+        ignore_index=True,
+    ).reset_index(drop=True)
 
 
 # attaches customer and store keys to returns through their order
