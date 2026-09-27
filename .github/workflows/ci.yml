@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+env:
+  PGPASSWORD: postgres
+
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -30,6 +33,34 @@ jobs:
       - run: uv sync --frozen
       - run: uv run pytest tests/dag -q
 
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_OPS_HOST: localhost
+      POSTGRES_OPS_DB: postgres
+      POSTGRES_OPS_USER: postgres
+      POSTGRES_OPS_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: psql -h localhost -U postgres -f sql/ops_schema.sql
+      - run: mkdir -p data/bronze
+      - run: uv run python -c "import pandas as pd; pd.DataFrame([{'customer_id': 'a', 'full_name': 'N', 'gender': 'Male', 'phone': '1'}]).to_parquet('data/bronze/dim_customers.parquet', index=False)"
+      - run: uv run pytest tests/integration -q
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -37,20 +68,66 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
       - run: uv run ruff check .
-      - run: uv run ruff format --check src scripts tests
+      - run: uv run ruff format --check src scripts tests dags dashboard
+      - run: uv run sqlfluff lint sql/
+
+  plpgsql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -y && sudo apt-get install -y postgresql-client
+      - run: psql -h localhost -U postgres -f sql/ops_schema.sql
+      - run: psql -h localhost -U postgres -f tests/fixtures/seed_gold_clean.sql
+      - run: psql -h localhost -U postgres -f sql/plpgsql_checks/source_checks.sql
+      - run: psql -h localhost -U postgres -f sql/plpgsql_checks/gold_checks.sql
+      - run: psql -h localhost -U postgres -f tests/fixtures/seed_gold_bad.sql
+      - run: "! psql -h localhost -U postgres -f sql/plpgsql_checks/gold_checks.sql"
 
   dbt:
     runs-on: ubuntu-latest
-    if: hashFiles('dbt/**') != ''
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_GOLD_HOST: localhost
+      POSTGRES_GOLD_STAGING_DB: lotus_gold_staging
+      POSTGRES_GOLD_USER: postgres
+      POSTGRES_GOLD_PASSWORD: postgres
+      DBT_PROFILES_DIR: ./dbt
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
-      - run: uv run dbt run --target staging
-      - run: uv run dbt test --target staging
+      - run: sudo apt-get update -y && sudo apt-get install -y postgresql-client
+      - run: psql -h localhost -U postgres -c "CREATE DATABASE lotus_gold_staging;"
+      - run: psql -h localhost -U postgres -d lotus_gold_staging -f tests/fixtures/seed_gold_clean.sql
+      - run: uv run dbt run --project-dir dbt --target staging
+      - run: uv run dbt test --project-dir dbt --target staging
 
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build -f Dockerfile.pipeline -t lotus-pipeline:ci .
+      - run: docker build -f Dockerfile.dashboard -t lotus-dashboard:ci .
