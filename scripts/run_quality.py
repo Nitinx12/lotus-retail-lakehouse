@@ -11,7 +11,7 @@ import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 
-from src.ops.db import build_dsn
+from src.ops.db import build_dsn, finish_run, start_run
 from src.quality.gates import (
     check_domain,
     check_not_null,
@@ -138,30 +138,36 @@ def main() -> None:
     with ops_conn() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
-            for name, results in suites.items():
-                pct, failed = score(results)
-                cur.execute(
-                    "INSERT INTO ops.quality_results (run_id, suite_name, success_percent, failed_expectations) VALUES (%s, %s, %s, %s)",
-                    (run_id, name, pct, failed),
-                )
-                cur.execute(
-                    "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out) VALUES (%s, %s, %s, %s, %s)",
-                    (
+            start_run(cur, run_id, "quality")
+            try:
+                for name, results in suites.items():
+                    pct, failed = score(results)
+                    cur.execute(
+                        "INSERT INTO ops.quality_results (run_id, suite_name, success_percent, failed_expectations) VALUES (%s, %s, %s, %s)",
+                        (run_id, name, pct, failed),
+                    )
+                    finish_run(
+                        cur,
                         run_id,
                         f"quality_{name}",
-                        "success" if failed == 0 else "failed",
+                        "failed" if failed else "success",
                         0,
-                        0,
-                    ),
-                )
-                log.info("quality %s pct=%s failed=%s", name, pct, failed)
-                if failed:
-                    blocked = True
-                    log.warning(
-                        "quality %s failures=%s",
-                        name,
-                        {k: v for k, v in results.items() if v},
+                        failed,
                     )
+                    log.info("quality %s pct=%s failed=%s", name, pct, failed)
+                    if failed:
+                        blocked = True
+                        log.warning(
+                            "quality %s failures=%s",
+                            name,
+                            {k: v for k, v in results.items() if v},
+                        )
+                finish_run(
+                    cur, run_id, "quality", "failed" if blocked else "success", 0, 0
+                )
+            except Exception as exc:
+                finish_run(cur, run_id, "quality", "failed", 0, 0, str(exc))
+                raise
     print(f"quality done run={run_id} blocked={blocked}")
     if blocked:
         sys.exit(1)

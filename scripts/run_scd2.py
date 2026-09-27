@@ -10,7 +10,7 @@ import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 
-from src.ops.db import build_dsn, with_batch
+from src.ops.db import build_dsn, finish_run, start_run, with_batch
 from src.silver.scd2 import CUSTOMER_TRACKED, EMPLOYEE_TRACKED, apply_scd2
 
 load_dotenv()
@@ -56,15 +56,14 @@ def version_dim(
     path = SILVER_DIR / f"{table}_scd2.parquet"
     current = pd.read_parquet(path) if path.exists() else None
     start = anchor_date if current is None else change_date
+    task = f"scd2_{table}"
+    start_run(cur, run_id, task)
     out = apply_scd2(
         current, with_batch(frame, run_id), natural_key, tracked, sk_col, start
     )
     out.to_parquet(path, index=False)
     versions = int((~out["is_current"]).sum())
-    cur.execute(
-        "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out) VALUES (%s, %s, %s, %s, %s)",
-        (run_id, f"scd2_{table}", "success", len(frame), len(out)),
-    )
+    finish_run(cur, run_id, task, "success", len(frame), len(out))
     log.info("scd2 %s rows=%s versions_closed=%s", table, len(out), versions)
     return out
 
@@ -80,40 +79,43 @@ def main() -> None:
     with ops_conn() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
-            customers = pd.read_parquet(SILVER_DIR / "dim_customers.parquet")
-            version_dim(
-                cur,
-                run_id,
-                customers,
-                "dim_customers",
-                "customer_id",
-                CUSTOMER_TRACKED,
-                "customer_sk",
-                anchor_date,
-                change_date,
-            )
-            employees = pd.read_parquet(SILVER_DIR / "dim_employees.parquet")
-            version_dim(
-                cur,
-                run_id,
-                employees,
-                "dim_employees",
-                "employee_id",
-                EMPLOYEE_TRACKED,
-                "employee_sk",
-                anchor_date,
-                change_date,
-            )
-            cur.execute(
-                "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out) VALUES (%s, %s, %s, %s, %s)",
-                (
+            start_run(cur, run_id, "scd2")
+            try:
+                customers = pd.read_parquet(SILVER_DIR / "dim_customers.parquet")
+                version_dim(
+                    cur,
+                    run_id,
+                    customers,
+                    "dim_customers",
+                    "customer_id",
+                    CUSTOMER_TRACKED,
+                    "customer_sk",
+                    anchor_date,
+                    change_date,
+                )
+                employees = pd.read_parquet(SILVER_DIR / "dim_employees.parquet")
+                version_dim(
+                    cur,
+                    run_id,
+                    employees,
+                    "dim_employees",
+                    "employee_id",
+                    EMPLOYEE_TRACKED,
+                    "employee_sk",
+                    anchor_date,
+                    change_date,
+                )
+                finish_run(
+                    cur,
                     run_id,
                     "scd2",
                     "success",
                     len(customers) + len(employees),
                     len(customers) + len(employees),
-                ),
-            )
+                )
+            except Exception as exc:
+                finish_run(cur, run_id, "scd2", "failed", 0, 0, str(exc))
+                raise
     print(f"scd2 done run={run_id}")
 
 

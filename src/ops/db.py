@@ -28,6 +28,40 @@ def read_sql(path: str | Path) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
+# inserts a running row for a task
+def start_run(cur: object, run_id: str, task: str) -> None:
+    cur.execute(
+        "INSERT INTO ops.pipeline_runs (run_id, task_name, status) "
+        "VALUES (%s, %s, 'running') "
+        "ON CONFLICT (run_id, task_name) DO UPDATE SET "
+        "status = 'running', started_at = now(), ended_at = NULL, "
+        "error_message = NULL",
+        (run_id, task),
+    )
+
+
+# marks a task row terminal with counts and an optional error
+def finish_run(
+    cur: object,
+    run_id: str,
+    task: str,
+    status: str,
+    rows_in: int = 0,
+    rows_out: int = 0,
+    err: str | None = None,
+) -> None:
+    cur.execute(
+        "INSERT INTO ops.pipeline_runs "
+        "(run_id, task_name, status, rows_in, rows_out, error_message) "
+        "VALUES (%s, %s, %s, %s, %s, %s) "
+        "ON CONFLICT (run_id, task_name) DO UPDATE SET "
+        "status = EXCLUDED.status, ended_at = now(), "
+        "rows_in = EXCLUDED.rows_in, rows_out = EXCLUDED.rows_out, "
+        "error_message = EXCLUDED.error_message",
+        (run_id, task, status, rows_in, rows_out, err),
+    )
+
+
 # stamps every row with the producing run id
 def with_batch(df: pd.DataFrame, run_id: str) -> pd.DataFrame:
     out = df.copy()

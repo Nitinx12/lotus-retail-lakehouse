@@ -10,7 +10,7 @@ import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 
-from src.ops.db import build_dsn, with_batch
+from src.ops.db import build_dsn, finish_run, start_run, with_batch
 from src.silver.transforms import (
     clean_customers,
     clean_orders,
@@ -51,13 +51,12 @@ def ops_conn() -> psycopg2.extensions.connection:
 
 # writes one frame and records its run row
 def land(cur: object, run_id: str, name: str, df: pd.DataFrame, rows_in: int) -> None:
+    task = f"silver_{name}"
+    start_run(cur, run_id, task)
     path = SILVER_DIR / f"{name}.parquet"
     df = with_batch(df, run_id)
     df.to_parquet(path, index=False)
-    cur.execute(
-        "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out) VALUES (%s, %s, %s, %s, %s)",
-        (run_id, f"silver_{name}", "success", rows_in, len(df)),
-    )
+    finish_run(cur, run_id, task, "success", rows_in, len(df))
     log.info("silver %s rows_in=%s rows_out=%s", name, rows_in, len(df))
 
 
@@ -70,51 +69,55 @@ def main() -> None:
     with ops_conn() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
-            customers = pd.read_parquet(BRONZE_DIR / "dim_customers.parquet")
-            out = clean_customers(customers)
-            total_in += len(customers)
-            total_out += len(out)
-            land(cur, run_id, "dim_customers", out, len(customers))
+            start_run(cur, run_id, "silver")
+            try:
+                customers = pd.read_parquet(BRONZE_DIR / "dim_customers.parquet")
+                out = clean_customers(customers)
+                total_in += len(customers)
+                total_out += len(out)
+                land(cur, run_id, "dim_customers", out, len(customers))
 
-            products = pd.read_parquet(BRONZE_DIR / "dim_products.parquet")
-            out = clean_products(products)
-            total_in += len(products)
-            total_out += len(out)
-            land(cur, run_id, "dim_products", out, len(products))
+                products = pd.read_parquet(BRONZE_DIR / "dim_products.parquet")
+                out = clean_products(products)
+                total_in += len(products)
+                total_out += len(out)
+                land(cur, run_id, "dim_products", out, len(products))
 
-            for name in (
-                "dim_stores",
-                "dim_employees",
-                "dim_date",
-                "fact_order_details",
-            ):
-                df = pd.read_parquet(BRONZE_DIR / f"{name}.parquet")
-                total_in += len(df)
-                total_out += len(df)
-                land(cur, run_id, name, df, len(df))
+                for name in (
+                    "dim_stores",
+                    "dim_employees",
+                    "dim_date",
+                    "fact_order_details",
+                ):
+                    df = pd.read_parquet(BRONZE_DIR / f"{name}.parquet")
+                    total_in += len(df)
+                    total_out += len(df)
+                    land(cur, run_id, name, df, len(df))
 
-            first = clean_orders(
-                pd.read_parquet(BRONZE_DIR / "fact_orders_2022_2023.parquet")
-            )
-            second = clean_orders(
-                pd.read_parquet(BRONZE_DIR / "fact_orders_2024.parquet")
-            )
-            orders = union_orders(first, second)
-            total_in += len(first) + len(second)
-            total_out += len(orders)
-            land(cur, run_id, "fact_orders", orders, len(first) + len(second))
+                first = clean_orders(
+                    pd.read_parquet(BRONZE_DIR / "fact_orders_2022_2023.parquet")
+                )
+                second = clean_orders(
+                    pd.read_parquet(BRONZE_DIR / "fact_orders_2024.parquet")
+                )
+                orders = union_orders(first, second)
+                total_in += len(first) + len(second)
+                total_out += len(orders)
+                land(cur, run_id, "fact_orders", orders, len(first) + len(second))
 
-            returns = pd.read_parquet(BRONZE_DIR / "fact_returns.parquet")
-            details = pd.read_parquet(BRONZE_DIR / "fact_order_details.parquet")
-            enriched = enrich_returns(returns, details)
-            total_in += len(returns)
-            total_out += len(enriched)
-            land(cur, run_id, "fact_returns", enriched, len(returns))
+                returns = pd.read_parquet(BRONZE_DIR / "fact_returns.parquet")
+                details = pd.read_parquet(BRONZE_DIR / "fact_order_details.parquet")
+                enriched = enrich_returns(returns, details)
+                total_in += len(returns)
+                total_out += len(enriched)
+                land(cur, run_id, "fact_returns", enriched, len(returns))
 
-            cur.execute(
-                "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out) VALUES (%s, %s, %s, %s, %s)",
-                (run_id, "silver", "success", total_in, total_out),
-            )
+                finish_run(cur, run_id, "silver", "success", total_in, total_out)
+            except Exception as exc:
+                finish_run(
+                    cur, run_id, "silver", "failed", total_in, total_out, str(exc)
+                )
+                raise
     log.info("silver done in=%s out=%s run=%s", total_in, total_out, run_id)
     print(f"silver done in={total_in} out={total_out} run={run_id}")
 
