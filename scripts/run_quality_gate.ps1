@@ -10,3 +10,7 @@ if (Test-Path -LiteralPath ".env") {
 $env:PYTHONPATH = "."
 uv run python scripts/run_quality.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+foreach ($suite in @("bronze", "silver", "gold")) {
+  uv run python scripts/run_gx.py --suite $suite
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}

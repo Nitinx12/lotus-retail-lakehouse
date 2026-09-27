@@ -19,6 +19,7 @@ from src.quality.gates import (
     check_unique,
     score,
 )
+from src.quality.gx_suites import BRONZE_TABLES, PAYMENTS
 
 load_dotenv()
 
@@ -34,19 +35,6 @@ logging.basicConfig(
     handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()],
 )
 log = logging.getLogger("quality")
-
-BRONZE_TABLES = [
-    "dim_customers",
-    "dim_date",
-    "dim_employees",
-    "dim_products",
-    "dim_stores",
-    "fact_order_details",
-    "fact_orders_2022_2023",
-    "fact_orders_2024",
-    "fact_returns",
-]
-PAYMENTS = {"Cash", "Credit Card", "Debit Card", "Fawry", "InstaPay", "Vodafone Cash"}
 
 
 # opens the ops postgres store
