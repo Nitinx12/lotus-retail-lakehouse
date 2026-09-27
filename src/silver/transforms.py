@@ -22,20 +22,19 @@ def strip_text(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 def normalize_gender(df: pd.DataFrame, col: str = "gender") -> pd.DataFrame:
     out = df.copy()
     if col in out.columns:
-        out[col] = out[col].where(
-            out[col].isna(),
-            out[col]
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .map({"male": "Male", "female": "Female"}),
+        stripped = out[col].where(out[col].isna(), out[col].astype(str).str.strip())
+        mapped = stripped.where(
+            stripped.isna(),
+            stripped.str.lower().map({"male": "Male", "female": "Female"}),
         )
+        out[col] = mapped.fillna(stripped)
     return out
 
 
 # cleans dim_customers fixing dupes, case, phone type, and dates
 def clean_customers(df: pd.DataFrame) -> pd.DataFrame:
     out = dedupe(df, ["customer_id"])
+    out = out[out["customer_id"].notna() & (out["customer_id"] != "")]
     out = strip_text(out, ["full_name", "city", "region", "loyalty_tier", "email"])
     out = normalize_gender(out)
     out["phone"] = out["phone"].astype("string")
@@ -88,5 +87,6 @@ def enrich_returns(returns: pd.DataFrame, details: pd.DataFrame) -> pd.DataFrame
         n_items=("product_id", "size"), order_revenue=("line_total_revenue", "sum")
     )
     out = returns.merge(agg, on="order_id", how="left")
+    out["return_orphan"] = out["n_items"].isna()
     out["return_date"] = pd.to_datetime(out["return_date"], errors="coerce").dt.date
     return strip_text(out, ["return_reason", "refund_method", "return_status"])
