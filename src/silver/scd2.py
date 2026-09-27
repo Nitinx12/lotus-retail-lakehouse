@@ -7,6 +7,10 @@ import pandas as pd
 
 HASH_COL = "attribute_hash"
 
+# tracked attributes per ARCHITECTURE section 7
+CUSTOMER_TRACKED = ["region", "loyalty_tier"]
+EMPLOYEE_TRACKED = ["store_id", "role"]
+
 
 # hashes tracked attributes into one comparable string
 def attribute_hash(df: pd.DataFrame, cols: list[str]) -> pd.Series:
@@ -28,7 +32,7 @@ def apply_scd2(
     sk_col: str,
     business_date: str,
 ) -> pd.DataFrame:
-    fresh = incoming.copy()
+    fresh = incoming.drop_duplicates(subset=[natural_key], keep="last").copy()
     fresh[HASH_COL] = attribute_hash(fresh, tracked).values
     if current is None or current.empty:
         out = fresh.copy()
@@ -87,10 +91,18 @@ def asof_join(
         dim["effective_end_date"], errors="coerce"
     )
     facts = facts.copy()
-    facts["_fdate"] = pd.to_datetime(facts[fact_date_col])
+    facts["_fdate"] = pd.to_datetime(facts[fact_date_col], errors="coerce")
+    facts["_pos"] = range(len(facts))
     merged = facts.merge(dim, on=natural_key, how="left", suffixes=("", "_dim"))
     active = (merged["effective_start_date"] <= merged["_fdate"]) & (
         merged["effective_end_date"].isna()
         | (merged["_fdate"] < merged["effective_end_date"])
     )
-    return merged[active].drop(columns=["_fdate"]).reset_index(drop=True)
+    matched = merged[active].drop(columns=["_fdate"])
+    missing = facts[~facts["_pos"].isin(matched["_pos"])]
+    fill = missing.drop(columns=["_fdate", "_pos"]).merge(
+        dim.iloc[0:0], on=natural_key, how="left", suffixes=("", "_dim")
+    )
+    return pd.concat(
+        [matched.drop(columns=["_pos"]), fill], ignore_index=True
+    ).reset_index(drop=True)

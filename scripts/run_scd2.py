@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -12,7 +11,7 @@ import psycopg2
 from dotenv import load_dotenv
 
 from src.ops.db import build_dsn
-from src.silver.scd2 import apply_scd2
+from src.silver.scd2 import CUSTOMER_TRACKED, EMPLOYEE_TRACKED, apply_scd2
 
 load_dotenv()
 
@@ -72,8 +71,9 @@ def version_dim(
 def main() -> None:
     run_id = str(uuid.uuid4())
     orders = pd.read_parquet(SILVER_DIR / "fact_orders.parquet")
-    anchor_date = pd.to_datetime(orders["order_date"]).min().date().isoformat()
-    change_date = datetime.now(UTC).date().isoformat()
+    parsed = pd.to_datetime(orders["order_date"])
+    anchor_date = parsed.min().date().isoformat()
+    change_date = parsed.max().date().isoformat()
     log.info("scd2 start run=%s anchor=%s", run_id, anchor_date)
     with ops_conn() as conn:
         conn.autocommit = True
@@ -85,7 +85,7 @@ def main() -> None:
                 customers,
                 "dim_customers",
                 "customer_id",
-                ["region", "loyalty_tier", "city"],
+                CUSTOMER_TRACKED,
                 "customer_sk",
                 anchor_date,
                 change_date,
@@ -97,7 +97,7 @@ def main() -> None:
                 employees,
                 "dim_employees",
                 "employee_id",
-                ["store_id", "role"],
+                EMPLOYEE_TRACKED,
                 "employee_sk",
                 anchor_date,
                 change_date,
