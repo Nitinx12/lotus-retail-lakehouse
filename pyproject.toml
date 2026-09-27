@@ -16,6 +16,9 @@ dependencies = [
   "sqlalchemy",
   "sqlfluff",
   "great-expectations>=1.23.2",
+  "streamlit>=1.64.0",
+  "dbt-core>=1.12.5",
+  "dbt-postgres>=1.11.0",
 ]
 
 [tool.pytest.ini_options]
