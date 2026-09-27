@@ -14,6 +14,7 @@ dependencies = [
   "pytest",
   "ruff",
   "sqlalchemy",
+  "sqlfluff",
   "great-expectations>=1.23.2",
 ]
 
