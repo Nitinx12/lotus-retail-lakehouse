@@ -47,3 +47,28 @@ def test_failed_run_persists(monkeypatch) -> None:
         conn.close()
     assert status == "failed"
     assert marker in error
+
+
+# checks a sql failure still records instead of poisoning the handler
+def test_sql_error_run_persists(monkeypatch) -> None:
+    import scripts.run_silver as silver
+
+    def _bad_land(cur, run_id, name, df, rows_in):
+        cur.execute("SELECT * FROM ops.missing_table")
+
+    monkeypatch.setattr(silver, "land", _bad_land)
+    with pytest.raises(psycopg2.Error):
+        silver.main()
+    conn = ops_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, error_message FROM ops.pipeline_runs "
+                "WHERE task_name = 'silver' AND status = 'failed' "
+                "ORDER BY started_at DESC LIMIT 1"
+            )
+            status, error = cur.fetchone()
+    finally:
+        conn.close()
+    assert status == "failed"
+    assert "missing_table" in error

@@ -166,6 +166,7 @@ def main() -> None:
                     cur, run_id, "quality", "failed" if blocked else "success", 0, 0
                 )
             except Exception as exc:
+                conn.rollback()
                 finish_run(cur, run_id, "quality", "failed", 0, 0, str(exc))
                 conn.commit()
                 raise

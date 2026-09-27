@@ -8,5 +8,7 @@ if (Test-Path -LiteralPath ".env") {
   }
 }
 $env:PYTHONPATH = "."
+uv run python scripts/run_plpgsql.py --suite source
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 uv run python scripts/run_bronze.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

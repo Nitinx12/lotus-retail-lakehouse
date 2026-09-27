@@ -64,18 +64,21 @@ ENV_CONFIG = {
         "catalog": "dev_lotus",
         "gold_schema": "lotus_gold_dev",
         "ops_conn": "postgres_ops_dev",
+        "gold_conn": "postgres_gold_dev",
         "databricks_conn": "databricks_dev",
     },
     "staging": {
         "catalog": "staging_lotus",
         "gold_schema": "lotus_gold_staging",
         "ops_conn": "postgres_ops_staging",
+        "gold_conn": "postgres_gold_staging",
         "databricks_conn": "databricks_staging",
     },
     "prod": {
         "catalog": "prod_lotus",
         "gold_schema": "lotus_gold_prod",
         "ops_conn": "postgres_ops_prod",
+        "gold_conn": "postgres_gold_prod",
         "databricks_conn": "databricks_prod",
     },
 }
@@ -172,7 +175,7 @@ with DAG(
 
     plpgsql_gold_checks = PostgresOperator(
         task_id="plpgsql_gold_checks",
-        postgres_conn_id=CFG["ops_conn"],
+        postgres_conn_id=CFG["gold_conn"],
         sql="sql/plpgsql_checks/gold_checks.sql",
         sla=timedelta(minutes=10),
     )

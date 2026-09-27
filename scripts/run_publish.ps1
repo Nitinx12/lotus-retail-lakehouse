@@ -10,3 +10,5 @@ if (Test-Path -LiteralPath ".env") {
 $env:PYTHONPATH = "."
 uv run python scripts/run_publish.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+uv run python scripts/run_plpgsql.py --suite gold
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

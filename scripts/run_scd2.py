@@ -114,6 +114,7 @@ def main() -> None:
                     len(customers) + len(employees),
                 )
             except Exception as exc:
+                conn.rollback()
                 finish_run(cur, run_id, "scd2", "failed", 0, 0, str(exc))
                 conn.commit()
                 raise

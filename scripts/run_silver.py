@@ -121,6 +121,7 @@ def main() -> None:
 
                 finish_run(cur, run_id, "silver", "success", total_in, total_out)
             except Exception as exc:
+                conn.rollback()
                 finish_run(
                     cur, run_id, "silver", "failed", total_in, total_out, str(exc)
                 )

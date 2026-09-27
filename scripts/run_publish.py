@@ -128,6 +128,7 @@ def main() -> None:
                         log.info("publish %s rows=%s", name, rows)
                 finish_run(cur, run_id, "publish", "success", total, total)
             except Exception as exc:
+                ops.rollback()
                 finish_run(cur, run_id, "publish", "failed", total, total, str(exc))
                 ops.commit()
                 raise

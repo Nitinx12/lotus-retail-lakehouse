@@ -158,6 +158,7 @@ def main() -> None:
                     log.info("bronze %s rows=%s", name, rows_in)
                 record_run(cur, run_id, "bronze", "success", total, total, None)
             except Exception as exc:
+                conn.rollback()
                 record_run(cur, run_id, "bronze", "failed", total, total, str(exc))
                 conn.commit()
                 raise

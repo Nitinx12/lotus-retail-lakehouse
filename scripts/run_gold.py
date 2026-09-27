@@ -95,6 +95,7 @@ def main() -> None:
                 land(cur, run_id, "mart_ramadan_seasonality", ramadan, len(facts))
                 finish_run(cur, run_id, "gold", "success", len(orders), len(facts))
             except Exception as exc:
+                conn.rollback()
                 finish_run(cur, run_id, "gold", "failed", 0, 0, str(exc))
                 conn.commit()
                 raise
