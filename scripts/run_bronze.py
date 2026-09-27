@@ -18,7 +18,7 @@ from src.bronze.ingest import (
     normalize_frame,
     schema_of,
 )
-from src.ops.db import build_dsn, with_batch
+from src.ops.db import build_dsn, finish_run, start_run, with_batch
 
 load_dotenv()
 
@@ -76,10 +76,33 @@ def record_run(
     rows_out: int,
     err: str | None,
 ) -> None:
+    finish_run(cur, run_id, task, status, rows_in, rows_out, err)
+
+
+# decides whether a collection needs a fresh read from mongo
+def needs_reload(
+    checkpoint_rows: int | None, live_count: int, have_parquet: bool
+) -> bool:
+    if checkpoint_rows is None or not have_parquet:
+        return True
+    return live_count != checkpoint_rows
+
+
+# lists added columns only when a previous load exists to compare against
+def columns_to_log(prev: list[str], curr_schema: dict[str, str]) -> list[str]:
+    if not prev:
+        return []
+    return detect_new_columns({c: "" for c in prev}, curr_schema)
+
+
+# reads the stored row count for one collection if a checkpoint exists
+def read_checkpoint(cur: object, name: str) -> int | None:
     cur.execute(
-        "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out, error_message) VALUES (%s, %s, %s, %s, %s, %s)",
-        (run_id, task, status, rows_in, rows_out, err),
+        "SELECT rows_copied FROM ops.extract_checkpoints WHERE source_collection = %s",
+        (name,),
     )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
 
 
 # lands every mongo collection into bronze parquet
@@ -97,32 +120,46 @@ def main() -> None:
     with ops_conn() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
-            for name in collections:
-                docs = list(db[name].find())
-                df = normalize_frame(pd.DataFrame(docs))
-                rows_in = len(df)
-                path = BRONZE_DIR / f"{name}.parquet"
-                prev = prior_columns(path)
-                curr_schema = schema_of(df)
-                for col in detect_new_columns({c: "" for c in prev}, curr_schema):
+            start_run(cur, run_id, "bronze")
+            try:
+                for name in collections:
+                    task = f"bronze_{name}"
+                    path = BRONZE_DIR / f"{name}.parquet"
+                    live = db[name].count_documents({})
+                    if not needs_reload(
+                        read_checkpoint(cur, name), live, path.exists()
+                    ):
+                        record_run(cur, run_id, task, "skipped", live, live, None)
+                        total += live
+                        log.info("bronze %s skipped rows=%s", name, live)
+                        continue
+                    start_run(cur, run_id, task)
+                    docs = list(db[name].find())
+                    last_id = str(docs[-1].get("_id")) if docs else None
+                    df = normalize_frame(pd.DataFrame(docs))
+                    rows_in = len(df)
+                    prev = prior_columns(path)
+                    curr_schema = schema_of(df)
+                    for col in columns_to_log(prev, curr_schema):
+                        cur.execute(
+                            "INSERT INTO ops.schema_changes (table_name, column_name, change_type) VALUES (%s, %s, %s)",
+                            (f"bronze.{name}", col, "add_column"),
+                        )
+                    if prev:
+                        df = df.reindex(columns=merge_columns(prev, list(df.columns)))
+                    df = with_batch(df, run_id)
+                    df.to_parquet(path, index=False)
                     cur.execute(
-                        "INSERT INTO ops.schema_changes (table_name, column_name, change_type) VALUES (%s, %s, %s)",
-                        (f"bronze.{name}", col, "add_column"),
+                        "INSERT INTO ops.extract_checkpoints (source_collection, last_object_id, last_loaded_at, rows_copied, updated_at) VALUES (%s, %s, %s, %s, now()) ON CONFLICT (source_collection) DO UPDATE SET last_object_id = EXCLUDED.last_object_id, last_loaded_at = EXCLUDED.last_loaded_at, rows_copied = EXCLUDED.rows_copied, updated_at = now()",
+                        (name, last_id, started, rows_in),
                     )
-                if prev:
-                    df = df.reindex(columns=merge_columns(prev, list(df.columns)))
-                df = with_batch(df, run_id)
-                df.to_parquet(path, index=False)
-                cur.execute(
-                    "INSERT INTO ops.extract_checkpoints (source_collection, last_loaded_at, rows_copied, updated_at) VALUES (%s, %s, %s, now()) ON CONFLICT (source_collection) DO UPDATE SET last_loaded_at = EXCLUDED.last_loaded_at, rows_copied = EXCLUDED.rows_copied, updated_at = now()",
-                    (name, started, rows_in),
-                )
-                record_run(
-                    cur, run_id, f"bronze_{name}", "success", rows_in, rows_in, None
-                )
-                total += rows_in
-                log.info("bronze %s rows=%s", name, rows_in)
-            record_run(cur, run_id, "bronze", "success", total, total, None)
+                    record_run(cur, run_id, task, "success", rows_in, rows_in, None)
+                    total += rows_in
+                    log.info("bronze %s rows=%s", name, rows_in)
+                record_run(cur, run_id, "bronze", "success", total, total, None)
+            except Exception as exc:
+                record_run(cur, run_id, "bronze", "failed", total, total, str(exc))
+                raise
     log.info("bronze done total=%s run=%s", total, run_id)
     print(f"bronze done total={total} run={run_id}")
 

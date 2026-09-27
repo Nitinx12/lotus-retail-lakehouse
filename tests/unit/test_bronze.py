@@ -1,6 +1,7 @@
 # unit tests for bronze pure helpers
 import pandas as pd
 
+from scripts.run_bronze import columns_to_log, needs_reload
 from src.bronze.ingest import (
     detect_new_columns,
     merge_columns,
@@ -30,3 +31,17 @@ def test_merge_columns() -> None:
 # checks schema capture type
 def test_schema_of() -> None:
     assert schema_of(pd.DataFrame([{"a": 1}])) == {"a": "int64"}
+
+
+# checks unchanged collections skip the reread
+def test_needs_reload() -> None:
+    assert needs_reload(None, 10, True) is True
+    assert needs_reload(10, 10, False) is True
+    assert needs_reload(10, 10, True) is False
+    assert needs_reload(10, 12, True) is True
+
+
+# checks first load logs no schema changes
+def test_columns_to_log() -> None:
+    assert columns_to_log([], {"a": "int64"}) == []
+    assert columns_to_log(["a"], {"a": "int64", "b": "object"}) == ["b"]
