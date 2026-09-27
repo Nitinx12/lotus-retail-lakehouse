@@ -14,5 +14,7 @@ COPY src/ ./src/
 COPY scripts/ ./scripts/
 COPY sql/ ./sql/
 COPY tests/ ./tests/
+COPY dbt/ ./dbt/
+COPY main.py ./
 
-CMD ["uv", "run", "pytest", "tests/unit", "-q"]
+CMD ["uv", "run", "python", "main.py", "all"]

@@ -8,7 +8,23 @@ on:
 env:
   PGPASSWORD: postgres
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  entrypoints:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: uv run python main.py --list
+      - run: uv run python main.py --help
+      - run: make -n pipeline
+      - run: test -f run_pipeline.bat
+      - run: cp .env.example .env
+      - run: docker compose config
   unit:
     runs-on: ubuntu-latest
     steps:
@@ -68,7 +84,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
       - run: uv run ruff check .
-      - run: uv run ruff format --check src scripts tests dags dashboard
+      - run: uv run ruff format --check src scripts tests dags dashboard main.py
       - run: uv run sqlfluff lint sql/
 
   plpgsql:

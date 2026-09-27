@@ -49,3 +49,6 @@
 * Commit failure rows explicitly so crashed stages always leave a failed row,
   and clear the connection error state before recording.
 * Wire the repo git hooks so lint and tests run on every commit and push.
+* Add unified pipeline entrypoints through main dot py plus Makefile targets plus Windows batch runner so local Unix Docker and Windows runs share one stage map.
+* Add pipeline and dashboard services to compose plus main dot py in the pipeline image so the full chain can run containerized.
+* Add CI entrypoints job covering main dot py plus Make dry run plus batch file presence plus compose config plus concurrency cancel.
