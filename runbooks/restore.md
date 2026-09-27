@@ -70,3 +70,26 @@ If the Gold Postgres database is also lost, reload it from the Gold parquet
 files on disk after the ops database is back, then reapply the security
 objects with `scripts/init_ops.py`, which grants the masked customer view to
 general BI roles and restricts the unmasked table to the PII reader role.
+
+```powershell
+$env:PYTHONPATH = "."
+uv run python scripts/run_publish.py
+uv run python scripts/init_ops.py
+```
+
+## Ingestion blocked by stuck rows
+
+The pre ingest source check fails when a previous run died without marking
+its tasks terminal. Confirm nobody is still running that run id, then clear
+only its stale running rows and rerun ingestion:
+
+```sql
+SELECT run_id, task_name, started_at
+FROM ops.pipeline_runs
+WHERE status = 'running'
+ORDER BY started_at;
+
+UPDATE ops.pipeline_runs
+SET status = 'failed', ended_at = now(), error_message = 'cleared as stuck'
+WHERE status = 'running';
+```

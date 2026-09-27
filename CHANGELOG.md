@@ -30,3 +30,22 @@
   `Dockerfile.pipeline`, and the CI workflow.
 * Remove the empty `main.py`, the empty dashboard requirements file, and the
   duplicate `env.example`.
+* Add the Airflow control plane in `dags/` with retries, SLAs, failure alerts,
+  and environment mapping, plus structural integrity tests that run without a
+  scheduler installed.
+* Publish Gold parquet to Postgres with per table transactions, and record
+  publish rows in ops.
+* Add PL/pgSQL source and Gold checks with a runner that records results in
+  ops and blocks on violations.
+* Add the dbt project with three marts and column plus relationship plus
+  reconciliation tests, verified row for row against the pipeline marts.
+* Add Great Expectations checkpoints for Bronze Silver and Gold that record
+  into ops and block on failure.
+* Add the Streamlit retail view and the pipeline ops page with the 7am IST
+  freshness banner, reading through the pooler.
+* Add the R analysis with PDF report build through latexmk.
+* Strip mongo extract metadata before Silver, and drop serving remnants from
+  Gold builders.
+* Commit failure rows explicitly so crashed stages always leave a failed row,
+  and clear the connection error state before recording.
+* Wire the repo git hooks so lint and tests run on every commit and push.
