@@ -15,6 +15,7 @@ from src.silver.transforms import (
     clean_customers,
     clean_orders,
     clean_products,
+    drop_extract_meta,
     enrich_returns,
     union_orders,
 )
@@ -89,7 +90,9 @@ def main() -> None:
                     "dim_date",
                     "fact_order_details",
                 ):
-                    df = pd.read_parquet(BRONZE_DIR / f"{name}.parquet")
+                    df = drop_extract_meta(
+                        pd.read_parquet(BRONZE_DIR / f"{name}.parquet")
+                    )
                     total_in += len(df)
                     total_out += len(df)
                     land(cur, run_id, name, df, len(df))
@@ -105,8 +108,12 @@ def main() -> None:
                 total_out += len(orders)
                 land(cur, run_id, "fact_orders", orders, len(first) + len(second))
 
-                returns = pd.read_parquet(BRONZE_DIR / "fact_returns.parquet")
-                details = pd.read_parquet(BRONZE_DIR / "fact_order_details.parquet")
+                returns = drop_extract_meta(
+                    pd.read_parquet(BRONZE_DIR / "fact_returns.parquet")
+                )
+                details = drop_extract_meta(
+                    pd.read_parquet(BRONZE_DIR / "fact_order_details.parquet")
+                )
                 enriched = enrich_returns(returns, details)
                 total_in += len(returns)
                 total_out += len(enriched)
@@ -117,6 +124,7 @@ def main() -> None:
                 finish_run(
                     cur, run_id, "silver", "failed", total_in, total_out, str(exc)
                 )
+                conn.commit()
                 raise
     log.info("silver done in=%s out=%s run=%s", total_in, total_out, run_id)
     print(f"silver done in={total_in} out={total_out} run={run_id}")

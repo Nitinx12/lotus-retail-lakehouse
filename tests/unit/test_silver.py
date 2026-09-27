@@ -5,6 +5,7 @@ from src.silver.transforms import (
     clean_customers,
     clean_orders,
     dedupe,
+    drop_extract_meta,
     enrich_returns,
     normalize_gender,
     split_product_name,
@@ -99,6 +100,13 @@ def test_clean_customers_drops_null_key() -> None:
     assert out["customer_id"].tolist() == ["a"]
 
 
+# checks extract metadata never reaches silver
+def test_drop_extract_meta() -> None:
+    df = pd.DataFrame([{"a": 1, "loaded_at": "t"}])
+    out = drop_extract_meta(df)
+    assert list(out.columns) == ["a"]
+
+
 # checks padded payment trim and bad date coercion
 def test_clean_orders() -> None:
     df = pd.DataFrame(
@@ -110,12 +118,14 @@ def test_clean_orders() -> None:
                 "customer_id": "c",
                 "employee_id": None,
                 "order_date": "not-a-date",
+                "loaded_at": "t",
             }
         ]
     )
     out = clean_orders(df)
     assert out["payment_method"].iloc[0] == "Cash"
     assert pd.isna(out["order_date"].iloc[0])
+    assert "loaded_at" not in out.columns
 
 
 # checks union dedupes across frames

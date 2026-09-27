@@ -9,6 +9,11 @@ def dedupe(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
     return df.drop_duplicates(subset=keys, keep="first").reset_index(drop=True)
 
 
+# drops mongo extract metadata that must not reach serving tables
+def drop_extract_meta(df: pd.DataFrame) -> pd.DataFrame:
+    return df.drop(columns=["loaded_at"], errors="ignore")
+
+
 # strips surrounding whitespace on the given string columns
 def strip_text(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     out = df.copy()
@@ -33,7 +38,8 @@ def normalize_gender(df: pd.DataFrame, col: str = "gender") -> pd.DataFrame:
 
 # cleans dim_customers fixing dupes, case, phone type, and dates
 def clean_customers(df: pd.DataFrame) -> pd.DataFrame:
-    out = dedupe(df, ["customer_id"])
+    out = drop_extract_meta(df)
+    out = dedupe(out, ["customer_id"])
     out = out[out["customer_id"].notna() & (out["customer_id"] != "")]
     out = strip_text(out, ["full_name", "city", "region", "loyalty_tier", "email"])
     out = normalize_gender(out)
@@ -56,7 +62,8 @@ def split_product_name(df: pd.DataFrame, col: str = "product_name_raw") -> pd.Da
 
 # cleans dim_products splitting names and dropping the redundant price text
 def clean_products(df: pd.DataFrame) -> pd.DataFrame:
-    out = dedupe(df, ["product_id"])
+    out = drop_extract_meta(df)
+    out = dedupe(out, ["product_id"])
     out = strip_text(out, ["category", "subcategory", "brand"])
     out = split_product_name(out)
     return out.drop(columns=["unit_price_text"], errors="ignore")
@@ -64,8 +71,10 @@ def clean_products(df: pd.DataFrame) -> pd.DataFrame:
 
 # cleans one fact_orders frame trimming text and parsing dates
 def clean_orders(df: pd.DataFrame) -> pd.DataFrame:
+    out = drop_extract_meta(df)
     out = strip_text(
-        df, ["payment_method", "order_status", "customer_id", "employee_id", "order_id"]
+        out,
+        ["payment_method", "order_status", "customer_id", "employee_id", "order_id"],
     )
     out["employee_id"] = out["employee_id"].where(
         out["employee_id"].notna() & (out["employee_id"] != ""), None
