@@ -18,7 +18,7 @@ from src.bronze.ingest import (
     normalize_frame,
     schema_of,
 )
-from src.ops.db import build_dsn
+from src.ops.db import build_dsn, with_batch
 
 load_dotenv()
 
@@ -111,6 +111,7 @@ def main() -> None:
                     )
                 if prev:
                     df = df.reindex(columns=merge_columns(prev, list(df.columns)))
+                df = with_batch(df, run_id)
                 df.to_parquet(path, index=False)
                 cur.execute(
                     "INSERT INTO ops.extract_checkpoints (source_collection, last_loaded_at, rows_copied, updated_at) VALUES (%s, %s, %s, now()) ON CONFLICT (source_collection) DO UPDATE SET last_loaded_at = EXCLUDED.last_loaded_at, rows_copied = EXCLUDED.rows_copied, updated_at = now()",

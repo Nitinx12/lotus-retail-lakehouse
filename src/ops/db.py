@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pandas as pd
+
 
 # builds a libpq dsn from parts
 def build_dsn(host: str, port: int, db: str, user: str, password: str) -> str:
@@ -24,3 +26,10 @@ def ops_config(prefix: str = "POSTGRES_OPS") -> dict[str, str | int]:
 # reads a sql file as text
 def read_sql(path: str | Path) -> str:
     return Path(path).read_text(encoding="utf-8")
+
+
+# stamps every row with the producing run id
+def with_batch(df: pd.DataFrame, run_id: str) -> pd.DataFrame:
+    out = df.copy()
+    out["_batch_id"] = run_id
+    return out

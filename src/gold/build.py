@@ -29,13 +29,17 @@ def build_fact_orders(
     missing = out[~out["_pos"].isin(matched["_pos"])].merge(
         emp.iloc[0:0], on="employee_id", how="left", suffixes=("", "_emp")
     )
-    return pd.concat(
+    out = pd.concat(
         [
             matched.drop(columns=["_fdate", "_pos"]),
             missing.drop(columns=["_fdate", "_pos"]),
         ],
         ignore_index=True,
     ).reset_index(drop=True)
+    return out.drop(
+        columns=[c for c in out.columns if c.startswith("_batch_id")],
+        errors="ignore",
+    )
 
 
 # attaches customer and store keys to returns through their order
@@ -43,7 +47,11 @@ def build_fact_returns(returns: pd.DataFrame, orders: pd.DataFrame) -> pd.DataFr
     keys = orders[
         ["order_id", "customer_sk", "employee_sk", "store_id"]
     ].drop_duplicates("order_id")
-    return returns.merge(keys, on="order_id", how="left")
+    out = returns.merge(keys, on="order_id", how="left")
+    return out.drop(
+        columns=[c for c in out.columns if c.startswith("_batch_id")],
+        errors="ignore",
+    )
 
 
 # aggregates monthly revenue and cost per store
@@ -79,9 +87,13 @@ def mart_return_rate_by_product(
 def mart_ramadan_seasonality(orders: pd.DataFrame, dates: pd.DataFrame) -> pd.DataFrame:
     out = orders.merge(dates[["date_id", "is_ramadan"]], on="date_id", how="left")
     out["month"] = pd.to_datetime(out["order_date"]).dt.to_period("M").astype(str)
-    return (
+    out = (
         out.groupby(["month", "is_ramadan"], as_index=False)
         .agg(revenue=("total_revenue", "sum"), orders=("order_id", "nunique"))
         .sort_values("month")
         .reset_index(drop=True)
+    )
+    return out.drop(
+        columns=[c for c in out.columns if c.startswith("_batch_id")],
+        errors="ignore",
     )

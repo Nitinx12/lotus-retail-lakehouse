@@ -17,7 +17,7 @@ from src.gold.build import (
     mart_return_rate_by_product,
     mart_revenue_by_store_month,
 )
-from src.ops.db import build_dsn
+from src.ops.db import build_dsn, with_batch
 
 load_dotenv()
 
@@ -52,6 +52,7 @@ def ops_conn() -> psycopg2.extensions.connection:
 # writes one frame and records its run row
 def land(cur: object, run_id: str, name: str, df: pd.DataFrame, rows_in: int) -> None:
     path = GOLD_DIR / f"{name}.parquet"
+    df = with_batch(df, run_id)
     df.to_parquet(path, index=False)
     cur.execute(
         "INSERT INTO ops.pipeline_runs (run_id, task_name, status, rows_in, rows_out) VALUES (%s, %s, %s, %s, %s)",

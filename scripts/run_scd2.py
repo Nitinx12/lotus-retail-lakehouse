@@ -10,7 +10,7 @@ import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 
-from src.ops.db import build_dsn
+from src.ops.db import build_dsn, with_batch
 from src.silver.scd2 import CUSTOMER_TRACKED, EMPLOYEE_TRACKED, apply_scd2
 
 load_dotenv()
@@ -56,7 +56,9 @@ def version_dim(
     path = SILVER_DIR / f"{table}_scd2.parquet"
     current = pd.read_parquet(path) if path.exists() else None
     start = anchor_date if current is None else change_date
-    out = apply_scd2(current, frame, natural_key, tracked, sk_col, start)
+    out = apply_scd2(
+        current, with_batch(frame, run_id), natural_key, tracked, sk_col, start
+    )
     out.to_parquet(path, index=False)
     versions = int((~out["is_current"]).sum())
     cur.execute(
