@@ -1,0 +1,12 @@
+ARG AIRFLOW_VERSION=2.10.5
+FROM apache/airflow:${AIRFLOW_VERSION}
+ARG AIRFLOW_VERSION
+USER airflow
+RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
+      "apache-airflow-providers-databricks<8" \
+      "apache-airflow-providers-postgres<6" \
+      apache-airflow-providers-mongo
+RUN python -m venv /home/airflow/dbt_venv \
+ && /home/airflow/dbt_venv/bin/pip install --no-cache-dir dbt-postgres
+ENV DBT_BIN=/home/airflow/dbt_venv/bin/dbt \
+    PATH="/home/airflow/dbt_venv/bin:${PATH}"

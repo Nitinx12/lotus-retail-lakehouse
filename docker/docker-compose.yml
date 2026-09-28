@@ -1,0 +1,217 @@
+name: lotus
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-lotus_gold_dev}
+      LOTUS_APP_PASSWORD: ${LOTUS_APP_PASSWORD:?set LOTUS_APP_PASSWORD in .env}
+      LOTUS_PIPELINE_PASSWORD: ${LOTUS_PIPELINE_PASSWORD:?set LOTUS_PIPELINE_PASSWORD in .env}
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:?set AIRFLOW_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../docker/postgres/init/01_roles_and_schemas.sh:/docker-entrypoint-initdb.d/01_roles_and_schemas.sh:ro
+      - ../sql/ops_schema.sql:/docker-entrypoint-initdb.d/02_ops_schema.sql:ro
+      - ../docker/postgres/init/03_grants.sql:/docker-entrypoint-initdb.d/03_grants.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-mongo_root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+      MONGO_DB: ${MONGO_DB:-lotus_retail}
+      MONGO_READER_USER: ${MONGO_READER_USER:-lotus_reader}
+      MONGO_READER_PASSWORD: ${MONGO_READER_PASSWORD:?set MONGO_READER_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongodata:/data/db
+      - ../docker/mongo/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  mongo-seed:
+    image: mongo:7
+    restart: "no"
+    entrypoint: ["bash", "/seed.sh"]
+    environment:
+      MONGO_URI: mongodb://${MONGO_ROOT_USER:-mongo_root}:${MONGO_ROOT_PASSWORD}@mongo:27017/${MONGO_DB:-lotus_retail}?authSource=admin
+      SEED_DROP: ${SEED_DROP:-0}
+    volumes:
+      - ../docker/mongo/seed.sh:/seed.sh:ro
+      - ../data/raw:/seed:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    restart: unless-stopped
+    environment:
+      DATABASES_HOST: postgres
+      DATABASES_PORT: 5432
+      DATABASES_USER: lotus_app
+      DATABASES_PASSWORD: ${LOTUS_APP_PASSWORD}
+      DATABASES_DBNAME: ${POSTGRES_DB:-lotus_gold_dev}
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      LISTEN_PORT: 6432
+    ports:
+      - "127.0.0.1:6432:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pipeline:
+    profiles: ["pipeline"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.pipeline
+      target: runtime
+    image: ${DOCKERHUB_NAMESPACE:-nitinx12}/lotus-pipeline:${IMAGE_TAG:-dev}
+    init: true
+    restart: "no"
+    env_file:
+      - ../.env
+    environment:
+      REQUIRED_ENV: "PGHOST PGUSER PGPASSWORD PGDATABASE MONGO_URI"
+      WAIT_FOR: "postgres:5432 mongo:27017"
+      CHECK_POSTGRES: "1"
+      PIPELINE_STAGE: all
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: lotus_pipeline
+      PGPASSWORD: ${LOTUS_PIPELINE_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-lotus_gold_dev}
+      DATABASE_URL: postgresql://lotus_pipeline:${LOTUS_PIPELINE_PASSWORD}@postgres:5432/${POSTGRES_DB:-lotus_gold_dev}
+      MONGO_URI: mongodb://${MONGO_READER_USER:-lotus_reader}:${MONGO_READER_PASSWORD}@mongo:27017/${MONGO_DB:-lotus_retail}?authSource=${MONGO_DB:-lotus_retail}
+      MONGO_DATABASE: ${MONGO_DB:-lotus_retail}
+      MONGO_DB: ${MONGO_DB:-lotus_retail}
+      POSTGRES_OPS_HOST: postgres
+      POSTGRES_OPS_PORT: "5432"
+      POSTGRES_OPS_DB: ${POSTGRES_DB:-lotus_gold_dev}
+      POSTGRES_OPS_USER: lotus_pipeline
+      POSTGRES_OPS_PASSWORD: ${LOTUS_PIPELINE_PASSWORD}
+      POSTGRES_GOLD_HOST: postgres
+      POSTGRES_GOLD_PORT: "5432"
+      POSTGRES_GOLD_DB: ${POSTGRES_DB:-lotus_gold_dev}
+      POSTGRES_GOLD_USER: lotus_pipeline
+      POSTGRES_GOLD_PASSWORD: ${LOTUS_PIPELINE_PASSWORD}
+      DBT_PROFILES_DIR: /app/dbt
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../reports:/app/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      mongo-seed:
+        condition: service_completed_successfully
+    command: ["python", "main.py", "all"]
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+      target: runtime
+    image: ${DOCKERHUB_NAMESPACE:-nitinx12}/lotus-dashboard:${IMAGE_TAG:-dev}
+    restart: unless-stopped
+    environment:
+      PGHOST: pgbouncer
+      PGPORT: "6432"
+      PGUSER: lotus_app
+      PGPASSWORD: ${LOTUS_APP_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-lotus_gold_dev}
+      DATABASE_URL: postgresql://lotus_app:${LOTUS_APP_PASSWORD}@pgbouncer:6432/${POSTGRES_DB:-lotus_gold_dev}
+    ports:
+      - "127.0.0.1:8501:8501"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+
+  report:
+    profiles: ["report"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.report
+      target: runtime
+    image: ${DOCKERHUB_NAMESPACE:-nitinx12}/lotus-report:${IMAGE_TAG:-dev}
+    init: true
+    restart: "no"
+    environment:
+      REQUIRED_ENV: "PGHOST PGUSER PGPASSWORD PGDATABASE"
+      WAIT_FOR: "pgbouncer:6432"
+      PIPELINE_STAGE: report
+      PGHOST: pgbouncer
+      PGPORT: "6432"
+      PGUSER: lotus_app
+      PGPASSWORD: ${LOTUS_APP_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-lotus_gold_dev}
+    volumes:
+      - ../reports:/app/reports
+      - ../logs:/app/logs
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+
+  airflow:
+    profiles: ["airflow"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.airflow
+    image: ${DOCKERHUB_NAMESPACE:-nitinx12}/lotus-airflow:${IMAGE_TAG:-dev}
+    restart: unless-stopped
+    command: standalone
+    env_file:
+      - ../.env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_meta:${AIRFLOW_DB_PASSWORD}@postgres:5432/airflow
+      AIRFLOW_VAR_LOTUS_ENV: ${LOTUS_ENV:-dev}
+      AIRFLOW_CONN_POSTGRES_OPS_DEV: postgresql://lotus_pipeline:${LOTUS_PIPELINE_PASSWORD}@postgres:5432/${POSTGRES_DB:-lotus_gold_dev}
+      AIRFLOW_CONN_POSTGRES_GOLD_DEV: postgresql://lotus_app:${LOTUS_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-lotus_gold_dev}
+      AIRFLOW_CONN_DATABRICKS_DEV: '{"conn_type": "databricks", "host": "${DATABRICKS_HOST}", "password": "${DATABRICKS_TOKEN}"}'
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../scripts:/opt/airflow/scripts
+      - ../sql:/opt/airflow/sql
+      - ../src:/opt/airflow/src
+      - ../dbt:/opt/airflow/dbt
+      - ../data:/opt/airflow/data
+      - ../logs:/opt/airflow/logs
+      - ../reports:/opt/airflow/reports
+      - ../main.py:/opt/airflow/main.py
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  mongodata:
+  airflow_logs:

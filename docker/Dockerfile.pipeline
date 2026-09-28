@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1.7
+
+ARG PYTHON_VERSION=3.13
+ARG UV_VERSION=0.9.0
+
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
+FROM python:${PYTHON_VERSION}-slim AS base
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
+WORKDIR /app
+
+FROM base AS builder
+COPY --from=uv /uv /uvx /bin/
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+COPY src/ ./src/
+COPY main.py ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+FROM builder AS test
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen
+COPY tests/ ./tests/
+CMD ["pytest", "tests/unit"]
+
+FROM base AS runtime
+ARG INSTALL_JAVA=0
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends bash ca-certificates postgresql-client \
+ && if [ "${INSTALL_JAVA}" = "1" ]; then apt-get install -y --no-install-recommends default-jre-headless; fi \
+ && rm -rf /var/lib/apt/lists/*
+RUN useradd --create-home --uid 1000 app \
+ && mkdir -p /app/data /app/logs /app/reports \
+ && chown -R app:app /app
+COPY --from=builder --chown=app:app /opt/venv /opt/venv
+COPY --chown=app:app src/ ./src/
+COPY --chown=app:app scripts/ ./scripts/
+COPY --chown=app:app sql/ ./sql/
+COPY --chown=app:app dbt/ ./dbt/
+COPY --chown=app:app main.py ./
+COPY --chown=app:app docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh /app/scripts/*.sh \
+ && chmod +x /usr/local/bin/entrypoint.sh /app/scripts/*.sh
+USER app
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["python", "main.py", "all"]

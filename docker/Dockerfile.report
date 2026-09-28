@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1.7
+
+ARG R_VERSION=4.5.1
+
+FROM rocker/r-ver:${R_VERSION} AS runtime
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      bash ca-certificates pandoc latexmk \
+      texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-xetex \
+      postgresql-client libpq-dev \
+ && rm -rf /var/lib/apt/lists/*
+RUN install2.r --error --skipinstalled --ncpus -1 \
+      DBI RPostgres dplyr ggplot2 lubridate scales knitr rmarkdown \
+ && rm -rf /tmp/downloaded_packages
+RUN useradd --create-home --uid 1000 app \
+ && mkdir -p /app/reports /app/logs \
+ && chown -R app:app /app
+WORKDIR /app
+COPY --chown=app:app r/ ./r/
+COPY --chown=app:app scripts/ ./scripts/
+COPY --chown=app:app docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh /app/scripts/*.sh \
+ && chmod +x /usr/local/bin/entrypoint.sh /app/scripts/*.sh
+USER app
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["bash", "scripts/run_report.sh"]
