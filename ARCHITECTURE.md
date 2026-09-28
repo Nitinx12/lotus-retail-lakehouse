@@ -267,9 +267,16 @@ lotus-lakehouse/
     smoke/
     unit/
     dag/                       # DAG integrity tests
-  Dockerfile.pipeline
-  Dockerfile.dashboard
-  docker-compose.yml
+  docker/
+    docker-compose.yml
+    Dockerfile.pipeline
+    Dockerfile.dashboard
+    Dockerfile.report
+    Dockerfile.airflow
+    entrypoint.sh
+    postgres/init/
+    mongo/init/
+    mongo/seed.sh
   .github/workflows/ci.yml
   .env.example
   ARCHITECTURE.md

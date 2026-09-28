@@ -12,7 +12,7 @@ for the working rules of this repo.
 ```powershell
 uv sync
 Copy-Item .env.example .env
-docker compose up -d
+powershell -File scripts/docker_up.ps1 up -d
 $env:PYTHONPATH = "."
 uv run python scripts/init_ops.py
 ```

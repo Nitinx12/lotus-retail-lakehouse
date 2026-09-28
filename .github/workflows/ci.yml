@@ -24,7 +24,7 @@ jobs:
       - run: make -n pipeline
       - run: test -f run_pipeline.bat
       - run: cp .env.example .env
-      - run: docker compose config
+      - run: bash scripts/docker_up.sh config
   unit:
     runs-on: ubuntu-latest
     steps:
@@ -74,7 +74,9 @@ jobs:
       - run: uv sync --frozen
       - run: psql -h localhost -U postgres -f sql/ops_schema.sql
       - run: mkdir -p data/bronze
-      - run: uv run python -c "import pandas as pd; pd.DataFrame([{'customer_id': 'a', 'full_name': 'N', 'gender': 'Male', 'phone': '1'}]).to_parquet('data/bronze/dim_customers.parquet', index=False)"
+      - run: >
+          uv run python -c "import pandas as pd;
+          pd.DataFrame([{'customer_id': 'a', 'full_name': 'N', 'gender': 'Male', 'phone': '1'}]).to_parquet('data/bronze/dim_customers.parquet', index=False)"
       - run: uv run pytest tests/integration -q
 
   lint:
@@ -145,5 +147,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f Dockerfile.pipeline -t lotus-pipeline:ci .
-      - run: docker build -f Dockerfile.dashboard -t lotus-dashboard:ci .
+      - run: docker build -f docker/Dockerfile.pipeline --target test -t lotus-pipeline:ci .
+      - run: docker run --rm lotus-pipeline:ci
+      - run: docker build -f docker/Dockerfile.dashboard -t lotus-dashboard:ci .
+      - run: docker build -f docker/Dockerfile.report -t lotus-report:ci .

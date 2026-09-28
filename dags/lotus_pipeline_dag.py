@@ -209,7 +209,7 @@ with DAG(
 
     docker_build = BashOperator(
         task_id="docker_build",
-        bash_command="docker build -f Dockerfile.pipeline -t lotus-pipeline:"
+        bash_command="docker build -f docker/Dockerfile.pipeline -t lotus-pipeline:"
         + LOTUS_ENV
         + " .",
         sla=timedelta(minutes=20),

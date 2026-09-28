@@ -47,14 +47,15 @@ publish:
 quality:
 	uv run python main.py quality
 
-# build pipeline and dashboard images
+# build pipeline dashboard and report images
 docker-build:
-	docker build -f Dockerfile.pipeline -t lotus-pipeline:local .
-	docker build -f Dockerfile.dashboard -t lotus-dashboard:local .
+	docker build -f docker/Dockerfile.pipeline -t lotus-pipeline:local .
+	docker build -f docker/Dockerfile.dashboard -t lotus-dashboard:local .
+	docker build -f docker/Dockerfile.report -t lotus-report:local .
 
-# start postgres mongo and dashboard stack
+# start the docker stack through the env exporting wrapper
 docker-up:
-	docker compose up --build
+	bash scripts/docker_up.sh up --build
 
 # show available targets
 help:
