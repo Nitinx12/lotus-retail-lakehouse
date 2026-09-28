@@ -39,6 +39,7 @@ STEPS_GOLD = [
     "functions/03_reconcile_marts.sql",
     "triggers/02_gold_triggers.sql",
     "security/masked_views.sql",
+    "security/roles.sql",
     "security/grants.sql",
 ]
 
