@@ -15,14 +15,20 @@ def _setting(names: list[str], default: str = "") -> str:
 
 LOTUS_ENV = os.getenv("LOTUS_ENV", "dev")
 PG_HOST = _setting(
-    ["POSTGRES_GOLD_POOL_HOST", "POSTGRES_GOLD_HOST", "LOTUS_PGHOST"], "localhost"
+    ["POSTGRES_GOLD_POOL_HOST", "POSTGRES_GOLD_HOST", "LOTUS_PGHOST", "PGHOST"],
+    "localhost",
 )
 PG_PORT = int(
-    _setting(["POSTGRES_GOLD_POOL_PORT", "POSTGRES_GOLD_PORT", "LOTUS_PGPORT"], "6432")
+    _setting(
+        ["POSTGRES_GOLD_POOL_PORT", "POSTGRES_GOLD_PORT", "LOTUS_PGPORT", "PGPORT"],
+        "6432",
+    )
 )
-PG_DATABASE = _setting(["POSTGRES_GOLD_DB", "LOTUS_PGDATABASE"], "lotus_gold_dev")
-PG_USER = _setting(["POSTGRES_GOLD_USER", "LOTUS_PGUSER"], "lotus_app")
-PG_PASSWORD = _setting(["POSTGRES_GOLD_PASSWORD", "LOTUS_PGPASSWORD"], "")
+PG_DATABASE = _setting(
+    ["POSTGRES_GOLD_DB", "LOTUS_PGDATABASE", "PGDATABASE"], "lotus_gold_dev"
+)
+PG_USER = _setting(["POSTGRES_GOLD_USER", "LOTUS_PGUSER", "PGUSER"], "lotus_app")
+PG_PASSWORD = _setting(["POSTGRES_GOLD_PASSWORD", "LOTUS_PGPASSWORD", "PGPASSWORD"], "")
 PG_SSLMODE = "require" if LOTUS_ENV == "prod" else "prefer"
 MART_SCHEMA = os.getenv("LOTUS_MART_SCHEMA", "marts")
 DATA_TTL_SECONDS = int(os.getenv("LOTUS_DASH_TTL", "300"))
