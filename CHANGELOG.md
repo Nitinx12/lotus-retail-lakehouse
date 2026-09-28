@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+* Fix the pooler service to use a published image tag with the entrypoint
+  variable names it expects, so `pgbouncer` starts instead of crash looping.
+* Map the stack host ports away from common local services: Postgres on 5434,
+  Mongo on 27019, Airflow on 8081, pooler stays on 6432.
+* Grant the pipeline role database create plus role create rights in the init
+  scripts, and let the app role read all Gold tables present and future.
+* Apply `security/roles.sql` before `security/grants.sql` in the `sql-gold`
+  stage so the PII reader role exists when grants run.
+* Teach the dashboard settings to also honor plain `PGHOST` style variables
+  so the container env resolves to the pooler.
+* Fix the README ops page path to `dashboard/pages/5_Ops.py`.
+* Force psql to stop on error in CI so a failing check can no longer exit
+  zero and flip a negated assertion.
+* Add a read only ASP.NET Core serving API over Gold with one mart endpoint
+  plus a liveness probe and passing unit tests, with a lint clean
+  `Dockerfile.api`, still unwired with no compose service or CI job yet.
+* Add a read only `lotus_api_reader` role with select on Gold plus Marts
+  plus the masked customer view plus `ops.pipeline_runs`, and revoke the
+  unmasked customer table, as the serving role for a future read API.
+
 * Add four executed notebooks under `notebooks`: Bronze EDA, Silver cleaning,
   Gold marts, and an end to end pipeline rebuild with quality gates green.
 * Add `jupyter` and `matplotlib` to project dependencies for notebook

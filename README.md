@@ -48,7 +48,7 @@ uv run dbt test --project-dir dbt --target dev
 uv run streamlit run dashboard/app.py
 ```
 
-The ops monitoring page lives at `dashboard/pages/ops.py` and reads only the
+The ops monitoring page lives at `dashboard/pages/5_Ops.py` and reads only the
 ops tables through the pooler. The R report needs R plus pandoc plus latexmk
 on PATH and renders with `scripts/run_report.ps1`.
 

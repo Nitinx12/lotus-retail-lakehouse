@@ -28,9 +28,10 @@ Run with `psql -f sql/apply_gold.sql` or `uv run python main.py sql-gold`:
 | 3 | `functions/03_reconcile_marts.sql` | Mart versus base reconciliation looping over checks |
 | 4 | `triggers/02_gold_triggers.sql` | Guard triggers, need the guard functions first |
 | 5 | `security/masked_views.sql` | Masked customer view for general BI roles |
-| 6 | `security/grants.sql` | PII grants, need the roles and the view first |
+| 6 | `security/roles.sql` | Least privilege roles, created only when missing |
+| 7 | `security/grants.sql` | PII grants, need the roles and the view first |
 
-`security/roles.sql` runs once from `scripts/init_ops.py` against the
+`security/roles.sql` also runs once from `scripts/init_ops.py` against the
 maintenance database since roles are cluster wide.
 
 `scripts/run_publish.py` re applies the gold indexes and guard triggers

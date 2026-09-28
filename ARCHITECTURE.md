@@ -11,6 +11,7 @@ This version adds the layer of maturity that separates a portfolio pipeline from
 - **PostgreSQL is the serving warehouse plus the operations store.** Gold lands here for Streamlit, R, dbt, and the PL/pgSQL quality loops to read, and a separate `ops` schema tracks pipeline runs, quality results, schema changes, and alerts.
 - **Apache Airflow is the control plane.** It is the piece that was missing before. Databricks Workflows alone can trigger Spark jobs, but this pipeline also has a Postgres side (PL/pgSQL checks), an R and LaTeX side, and a Docker build and publish side, none of which are Databricks tasks. Airflow is where all of that becomes one DAG with real dependency ordering, retries, backfills, and alert routing, rather than a chain of shell scripts hoping the previous one succeeded.
 - **A secrets backend (HashiCorp Vault, or the cloud-native equivalent — AWS Secrets Manager / Azure Key Vault) is the credential store.** No live credential lives in a `.env` file, a DAG file, or source control past local development. See Section 10.
+- **(Optional) A C#/ASP.NET Core API is an additional, read-only consumer of Postgres Gold**, alongside Streamlit and R. It sits entirely downstream of the pipeline and does not participate in orchestration or transforms. See Section 16.
 
 ## 2. High level flow
 
@@ -230,7 +231,20 @@ The Streamlit ops page (`pages/ops.py`) reads only these two tables plus `schema
 
 Merge to `main` promotes through `staging` (Section 11) before a manual/gated promotion to `prod`.
 
-## 16. Repository layout
+## 16. Optional: C# serving API
+
+A read-only ASP.NET Core Web API sits **downstream of everything above** — it reads Gold from Postgres the same way Streamlit and R already do, over the same connection pooler, through the same masked views for PII. It does not touch Mongo, Databricks, the Airflow DAG, dbt, or Great Expectations, and no task upstream of `A8` (Section 2) is aware it exists.
+
+- **Purpose.** Give external services/clients (not just the Streamlit dashboard) a stable, typed HTTP interface onto Gold — e.g. `GET /api/orders/summary`, `GET /api/customers/{id}/history`, `GET /api/marts/revenue-by-store-month`.
+- **Data access.** EF Core (Database-First, scaffolded from the existing `gold` schema) or Dapper against the same read-only service account pattern described in Section 10 — a scoped role that can `SELECT` on `gold.*` (and `gold.dim_customers_masked`, never the unmasked PII table) and nothing else.
+- **Connection secrets.** Resolved the same way as every other credential in this project (Section 10): local dev reads `appsettings.Development.json`/`.env`, staging/prod pull the Postgres DSN from the same secrets backend (Vault / cloud secrets manager) at startup, never committed.
+- **Environments.** Follows the same `dev`/`staging`/`prod` parameterization as Section 11 — an `ASPNETCORE_ENVIRONMENT` value selects which connection string / schema the API resolves against, mirroring the `LOTUS_ENV` Airflow Variable.
+- **Observability.** Optionally reads (never writes) `ops.pipeline_runs` and `ops.quality_results` to expose a `/api/health/freshness` endpoint, so API consumers can check "is Gold current" without duplicating the Streamlit ops page's logic.
+- **Packaging.** Ships as its own `Dockerfile.api` alongside the existing pipeline/dashboard/report/airflow images (Section 16 repo layout), with its own image tag and its own entry in CI (Section 15) — `dotnet build` / `dotnet test` as an additional, independent CI job, not a change to the existing `pytest`/`dbt`/DAG-integrity jobs.
+
+This keeps the boundary clean: everything left of Postgres Gold in Section 2's diagram is unchanged; the API is just one more reader on the right-hand side, like Streamlit and R.
+
+## 17. Repository layout
 
 ```
 lotus-lakehouse/
@@ -261,6 +275,14 @@ lotus-lakehouse/
     app.py
     pages/
       ops.py
+  dotnet-api/                 # optional read-only Gold serving API, see Section 16
+    LotusApi/
+      Program.cs
+      appsettings.json
+      Controllers/
+      Models/                 # EF Core entities scaffolded from gold schema
+      Data/
+    LotusApi.Tests/
   runbooks/
     restore.md                # Delta time-travel and Postgres PITR recovery steps
   tests/
@@ -284,7 +306,7 @@ lotus-lakehouse/
   CHANGELOG.md
 ```
 
-## 17. Tech stack summary
+## 18. Tech stack summary
 
 | Concern | Tool |
 |---|---|
@@ -303,4 +325,6 @@ lotus-lakehouse/
 | Statistical analysis | R, revenue trend, return rate, Ramadan seasonality |
 | Reporting | R Markdown or Quarto to LaTeX to PDF via `latexmk` |
 | Dashboard | Streamlit, main retail view plus an ops monitoring page |
+| Serving API (optional) | C# / ASP.NET Core, EF Core or Dapper, read-only against Postgres Gold (Section 16) |
 | Packaging and distribution | Docker (pipeline and dashboard images), GitHub Actions, GitHub Container Registry, Docker Hub |
+
