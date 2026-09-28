@@ -32,3 +32,7 @@ Run with `psql -f sql/apply_gold.sql` or `uv run python main.py sql-gold`:
 
 `security/roles.sql` runs once from `scripts/init_ops.py` against the
 maintenance database since roles are cluster wide.
+
+`scripts/run_publish.py` re applies the gold indexes and guard triggers
+after every publish, so serving objects attach even when `sql-gold` ran
+before the first publish created the tables.

@@ -1,0 +1,13 @@
+# Code owners for the Lotus Retail Lakehouse.
+# One owner today; area lines document review focus as the team grows.
+* @Nitinx12
+/src/ @Nitinx12
+/scripts/ @Nitinx12
+/dags/ @Nitinx12
+/sql/ @Nitinx12
+/dbt/ @Nitinx12
+/r/ @Nitinx12
+/notebooks/ @Nitinx12
+/dashboard/ @Nitinx12
+/docker/ @Nitinx12
+/.github/ @Nitinx12

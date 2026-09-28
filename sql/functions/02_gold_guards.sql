@@ -1,3 +1,6 @@
+-- ensures the serving schema exists before guards attach
+CREATE SCHEMA IF NOT EXISTS gold;
+
 -- rejects future order dates and negative revenue on facts
 CREATE OR REPLACE FUNCTION gold.guard_fact_order()
 RETURNS trigger

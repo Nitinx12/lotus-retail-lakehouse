@@ -1,20 +1,20 @@
 DEFAULT_GOAL := help
 
-.PHONY: install lint format test unit smoke dag integration pipeline publish quality report dashboard notebooks docker-build docker-up help
+.PHONY: install lint format test unit smoke dag integration pipeline publish quality sql report dashboard notebooks docker-build docker-up clean help
 
 # install project dependencies with uv
 install:
 	uv sync
 
-# run ruff and sqlfluff checks
+# run ruff and sqlfluff checks same scope as the git hooks
 lint:
 	uv run ruff check .
-	uv run ruff format --check src scripts tests dags dashboard main.py
+	uv run ruff format --check .
 	uv run sqlfluff lint sql/
 
 # apply ruff formatting
 format:
-	uv run ruff format src scripts tests dags dashboard main.py
+	uv run ruff format .
 
 # run unit smoke and dag suites
 test: unit smoke dag
@@ -47,6 +47,10 @@ publish:
 quality:
 	uv run python main.py quality
 
+# apply versioned sql objects to ops then gold
+sql:
+	uv run python main.py sql-ops sql-gold
+
 # render the r analysis and stakeholder report
 report:
 	bash scripts/run_report.sh
@@ -68,6 +72,10 @@ docker-build:
 # start the docker stack through the env exporting wrapper
 docker-up:
 	bash scripts/docker_up.sh up --build
+
+# remove generated reports and notebook checkpoints never source data
+clean:
+	rm -rf output reports notebooks/.ipynb_checkpoints .quarto r/.quarto
 
 # show available targets
 help:

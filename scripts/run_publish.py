@@ -11,7 +11,7 @@ import psycopg2
 from dotenv import load_dotenv
 from sqlalchemy import Engine, create_engine, text
 
-from src.ops.db import build_dsn, finish_run, start_run
+from src.ops.db import build_dsn, finish_run, read_sql, start_run
 
 load_dotenv()
 
@@ -126,6 +126,13 @@ def main() -> None:
                         finish_run(cur, run_id, task, "success", rows, rows)
                         total += rows
                         log.info("publish %s rows=%s", name, rows)
+                    with gold.cursor() as gcur:
+                        for name in (
+                            "index/02_gold_indexes.sql",
+                            "triggers/02_gold_triggers.sql",
+                        ):
+                            gcur.execute(read_sql(Path(f"sql/{name}")))
+                            log.info("publish ensured %s", name)
                 finish_run(cur, run_id, "publish", "success", total, total)
             except Exception as exc:
                 ops.rollback()

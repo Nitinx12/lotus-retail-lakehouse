@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a change to the pipeline, dashboard, or reports
+title: "[feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What need does this serve
+      placeholder: Ops has no alert history to browse after a failure pages
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should change and where it fits in ARCHITECTURE.md
+      placeholder: Record alerts in ops.alerts and show them on the Ops page
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - pipeline
+        - analytics
+        - infra
+        - docs
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope notes
+      options:
+        - label: Needs a CHANGELOG.md entry
+        - label: Needs new tests before it is done
+        - label: Touches secrets handling or PII

@@ -110,10 +110,11 @@ def main() -> None:
     with warehouse_conn("POSTGRES_OPS") as ops:
         ops.autocommit = True
         with ops.cursor() as cur:
+            apply_file(cur, "ops_schema.sql")
             start_run(cur, run_id, "sql_apply")
             try:
                 if args.db in ("ops", "all"):
-                    for name in STEPS_OPS:
+                    for name in STEPS_OPS[1:]:
                         apply_file(cur, name)
                 if args.db in ("gold", "all"):
                     with warehouse_conn("POSTGRES_GOLD") as gold:

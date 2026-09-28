@@ -18,6 +18,14 @@
   procedures, a looping mart reconciler, and analyst queries. New
   `sql-ops` and `sql-gold` stages in `main.py` apply them, and fix stage
   scripts to resolve imports through `PYTHONPATH`.
+* Fix `Makefile` lint scope to match the git hooks, add `sql` and `clean`
+  targets, fix `run_pipeline.bat` with a `sql` branch and a bypass for
+  the PowerShell execution policy, and add a `sql` CI job covering
+  apply, reconcile, guards, alert triggers, procedures, and analysis
+  queries on a fresh database.
+* Fill the GitHub setup: code owners, dependabot for uv plus actions
+  plus Docker, area labeler with its labels created, PR template, bug
+  and feature issue forms, and a label sync workflow.
 
 * Fix customer Type 2 tracking to hash region and loyalty tier only, so a city
   move no longer mints a spurious version. Rebuild the Silver SCD tables after

@@ -1,0 +1,5 @@
+blank_issues: false
+contact_links:
+  - name: Architecture and runbooks
+    url: https://github.com/Nitinx12/lotus-retail-lakehouse/blob/main/ARCHITECTURE.md
+    about: Start here before filing; most pipeline questions are answered there

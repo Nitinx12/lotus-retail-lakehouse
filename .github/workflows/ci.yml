@@ -22,6 +22,9 @@ jobs:
       - run: uv run python main.py --list
       - run: uv run python main.py --help
       - run: make -n pipeline
+      - run: make -n sql
+      - run: make -n report
+      - run: make -n notebooks
       - run: test -f run_pipeline.bat
       - run: cp .env.example .env
       - run: bash scripts/docker_up.sh config
@@ -86,8 +89,73 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
       - run: uv run ruff check .
-      - run: uv run ruff format --check src scripts tests dags dashboard main.py
+      - run: uv run ruff format --check .
       - run: uv run sqlfluff lint sql/
+
+  sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_OPS_HOST: localhost
+      POSTGRES_OPS_DB: postgres
+      POSTGRES_OPS_USER: postgres
+      POSTGRES_OPS_PASSWORD: postgres
+      POSTGRES_GOLD_HOST: localhost
+      POSTGRES_GOLD_DB: postgres
+      POSTGRES_GOLD_USER: postgres
+      POSTGRES_GOLD_PASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: sudo apt-get update -y && sudo apt-get install -y postgresql-client
+      - run: uv run python main.py sql-ops sql-gold
+      - run: psql -h localhost -U postgres -f tests/fixtures/seed_gold_clean.sql
+      - run: |
+          psql -h localhost -U postgres <<'EOF'
+          CREATE SCHEMA IF NOT EXISTS marts;
+          CREATE TABLE marts.revenue_by_store_month AS
+          SELECT store_id, to_char(order_date, 'YYYY-MM') AS month,
+              sum(total_revenue) AS revenue, sum(total_cost) AS cost,
+              count(*) AS orders
+          FROM gold.fact_orders GROUP BY 1, 2;
+          CREATE TABLE marts.return_rate_by_product AS
+          SELECT product_id, count(*) AS times_ordered,
+              0 AS times_returned, 0::numeric AS return_rate
+          FROM gold.fact_order_details GROUP BY 1;
+          CREATE TABLE marts.ramadan_seasonality AS
+          SELECT to_char(o.order_date, 'YYYY-MM') AS month,
+              (d.is_ramadan = 1) AS is_ramadan,
+              sum(o.total_revenue) AS revenue, count(*) AS orders
+          FROM gold.fact_orders AS o
+          JOIN gold.dim_date AS d ON d.date_id = o.date_id
+          GROUP BY 1, 2;
+          EOF
+      - run: uv run python main.py sql-gold
+      - run: psql -h localhost -U postgres -c "SELECT * FROM gold.reconcile_marts();"
+      - run: psql -h localhost -U postgres -t -A -c "SELECT count(*) FROM gold.reconcile_marts() WHERE failed <> 0;" | grep -qx 0
+      - run: psql -h localhost -U postgres -c "INSERT INTO gold.fact_orders (order_id, order_date, date_id, customer_id, store_id, total_revenue, total_cost, customer_sk) VALUES ('bad', CURRENT_DATE + 1, 20220101, 'c', 1, 5.0, 2.0, NULL);" 2>&1 | grep -q "future order_date"
+      - run: psql -h localhost -U postgres -c "INSERT INTO gold.fact_returns (return_id, order_id, return_amount) VALUES ('bad', 'o1', -5.0);" 2>&1 | grep -q "negative return_amount"
+      - run: psql -h localhost -U postgres -c "INSERT INTO ops.pipeline_runs (run_id, task_name, status, error_message) VALUES (gen_random_uuid(), 'ci_probe', 'failed', 'ci');"
+      - run: psql -h localhost -U postgres -t -A -c "SELECT count(*) FROM ops.alerts WHERE source_task = 'ci_probe';" | grep -qx 1
+      - run: psql -h localhost -U postgres -c "INSERT INTO ops.quality_results (run_id, suite_name, success_percent, failed_expectations) VALUES (gen_random_uuid(), 'ci_suite', 50.0, 1);"
+      - run: psql -h localhost -U postgres -t -A -c "SELECT count(*) FROM ops.alerts WHERE source_task = 'ci_suite';" | grep -qx 1
+      - run: psql -h localhost -U postgres -c "CALL ops.close_stuck_runs();"
+      - run: psql -h localhost -U postgres -c "CALL ops.purge_old_runs(0);"
+      - run: psql -h localhost -U postgres -f sql/analysis/01_revenue_trend.sql
+      - run: psql -h localhost -U postgres -f sql/analysis/02_return_outliers.sql
+      - run: psql -h localhost -U postgres -f sql/analysis/03_ramadan_lift.sql
 
   plpgsql:
     runs-on: ubuntu-latest
