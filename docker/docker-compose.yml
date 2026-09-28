@@ -10,9 +10,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-lotus_gold_dev}
       LOTUS_APP_PASSWORD: ${LOTUS_APP_PASSWORD:?set LOTUS_APP_PASSWORD in .env}
       LOTUS_PIPELINE_PASSWORD: ${LOTUS_PIPELINE_PASSWORD:?set LOTUS_PIPELINE_PASSWORD in .env}
+      LOTUS_API_READER_PASSWORD: ${LOTUS_API_READER_PASSWORD:?set LOTUS_API_READER_PASSWORD in .env}
       AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD:?set AIRFLOW_DB_PASSWORD in .env}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ../docker/postgres/init/01_roles_and_schemas.sh:/docker-entrypoint-initdb.d/01_roles_and_schemas.sh:ro
@@ -35,7 +36,7 @@ services:
       MONGO_READER_USER: ${MONGO_READER_USER:-lotus_reader}
       MONGO_READER_PASSWORD: ${MONGO_READER_PASSWORD:?set MONGO_READER_PASSWORD in .env}
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:27019:27017"
     volumes:
       - mongodata:/data/db
       - ../docker/mongo/init:/docker-entrypoint-initdb.d:ro
@@ -61,14 +62,14 @@ services:
         condition: service_healthy
 
   pgbouncer:
-    image: edoburu/pgbouncer:1.23.1
+    image: edoburu/pgbouncer:v1.23.1-p3
     restart: unless-stopped
     environment:
-      DATABASES_HOST: postgres
-      DATABASES_PORT: 5432
-      DATABASES_USER: lotus_app
-      DATABASES_PASSWORD: ${LOTUS_APP_PASSWORD}
-      DATABASES_DBNAME: ${POSTGRES_DB:-lotus_gold_dev}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: lotus_app
+      DB_PASSWORD: ${LOTUS_APP_PASSWORD}
+      DB_NAME: ${POSTGRES_DB:-lotus_gold_dev}
       POOL_MODE: transaction
       AUTH_TYPE: scram-sha-256
       LISTEN_PORT: 6432
@@ -146,6 +147,11 @@ services:
       PGPASSWORD: ${LOTUS_APP_PASSWORD}
       PGDATABASE: ${POSTGRES_DB:-lotus_gold_dev}
       DATABASE_URL: postgresql://lotus_app:${LOTUS_APP_PASSWORD}@pgbouncer:6432/${POSTGRES_DB:-lotus_gold_dev}
+      POSTGRES_GOLD_POOL_HOST: pgbouncer
+      POSTGRES_GOLD_POOL_PORT: "6432"
+      POSTGRES_GOLD_DB: ${POSTGRES_DB:-lotus_gold_dev}
+      POSTGRES_GOLD_USER: lotus_app
+      POSTGRES_GOLD_PASSWORD: ${LOTUS_APP_PASSWORD}
     ports:
       - "127.0.0.1:8501:8501"
     depends_on:
@@ -170,6 +176,11 @@ services:
       PGUSER: lotus_app
       PGPASSWORD: ${LOTUS_APP_PASSWORD}
       PGDATABASE: ${POSTGRES_DB:-lotus_gold_dev}
+      POSTGRES_GOLD_POOL_HOST: pgbouncer
+      POSTGRES_GOLD_POOL_PORT: "6432"
+      POSTGRES_GOLD_DB: ${POSTGRES_DB:-lotus_gold_dev}
+      POSTGRES_GOLD_USER: lotus_app
+      POSTGRES_GOLD_PASSWORD: ${LOTUS_APP_PASSWORD}
     volumes:
       - ../reports:/app/reports
       - ../logs:/app/logs
@@ -196,7 +207,7 @@ services:
       AIRFLOW_CONN_POSTGRES_GOLD_DEV: postgresql://lotus_app:${LOTUS_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-lotus_gold_dev}
       AIRFLOW_CONN_DATABRICKS_DEV: '{"conn_type": "databricks", "host": "${DATABRICKS_HOST}", "password": "${DATABRICKS_TOKEN}"}'
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8080"
     volumes:
       - ../dags:/opt/airflow/dags
       - ../scripts:/opt/airflow/scripts
