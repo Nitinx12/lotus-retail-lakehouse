@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
-      - run: psql -h localhost -U postgres -f sql/ops_schema.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f sql/ops_schema.sql
       - run: mkdir -p data/bronze
       - run: >
           uv run python -c "import pandas as pd;
@@ -121,9 +121,9 @@ jobs:
       - run: uv sync --frozen
       - run: sudo apt-get update -y && sudo apt-get install -y postgresql-client
       - run: uv run python main.py sql-ops sql-gold
-      - run: psql -h localhost -U postgres -f tests/fixtures/seed_gold_clean.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f tests/fixtures/seed_gold_clean.sql
       - run: |
-          psql -h localhost -U postgres <<'EOF'
+          psql -v ON_ERROR_STOP=1 -h localhost -U postgres <<'EOF'
           CREATE SCHEMA IF NOT EXISTS marts;
           CREATE TABLE marts.revenue_by_store_month AS
           SELECT store_id, to_char(order_date, 'YYYY-MM') AS month,
@@ -143,19 +143,19 @@ jobs:
           GROUP BY 1, 2;
           EOF
       - run: uv run python main.py sql-gold
-      - run: psql -h localhost -U postgres -c "SELECT * FROM gold.reconcile_marts();"
-      - run: psql -h localhost -U postgres -t -A -c "SELECT count(*) FROM gold.reconcile_marts() WHERE failed <> 0;" | grep -qx 0
-      - run: psql -h localhost -U postgres -c "INSERT INTO gold.fact_orders (order_id, order_date, date_id, customer_id, store_id, total_revenue, total_cost, customer_sk) VALUES ('bad', CURRENT_DATE + 1, 20220101, 'c', 1, 5.0, 2.0, NULL);" 2>&1 | grep -q "future order_date"
-      - run: psql -h localhost -U postgres -c "INSERT INTO gold.fact_returns (return_id, order_id, return_amount) VALUES ('bad', 'o1', -5.0);" 2>&1 | grep -q "negative return_amount"
-      - run: psql -h localhost -U postgres -c "INSERT INTO ops.pipeline_runs (run_id, task_name, status, error_message) VALUES (gen_random_uuid(), 'ci_probe', 'failed', 'ci');"
-      - run: psql -h localhost -U postgres -t -A -c "SELECT count(*) FROM ops.alerts WHERE source_task = 'ci_probe';" | grep -qx 1
-      - run: psql -h localhost -U postgres -c "INSERT INTO ops.quality_results (run_id, suite_name, success_percent, failed_expectations) VALUES (gen_random_uuid(), 'ci_suite', 50.0, 1);"
-      - run: psql -h localhost -U postgres -t -A -c "SELECT count(*) FROM ops.alerts WHERE source_task = 'ci_suite';" | grep -qx 1
-      - run: psql -h localhost -U postgres -c "CALL ops.close_stuck_runs();"
-      - run: psql -h localhost -U postgres -c "CALL ops.purge_old_runs(0);"
-      - run: psql -h localhost -U postgres -f sql/analysis/01_revenue_trend.sql
-      - run: psql -h localhost -U postgres -f sql/analysis/02_return_outliers.sql
-      - run: psql -h localhost -U postgres -f sql/analysis/03_ramadan_lift.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -c "SELECT * FROM gold.reconcile_marts();"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -t -A -c "SELECT count(*) FROM gold.reconcile_marts() WHERE failed <> 0;" | grep -qx 0
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -c "INSERT INTO gold.fact_orders (order_id, order_date, date_id, customer_id, store_id, total_revenue, total_cost, customer_sk) VALUES ('bad', CURRENT_DATE + 1, 20220101, 'c', 1, 5.0, 2.0, NULL);" 2>&1 | grep -q "future order_date"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -c "INSERT INTO gold.fact_returns (return_id, order_id, return_amount) VALUES ('bad', 'o1', -5.0);" 2>&1 | grep -q "negative return_amount"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -c "INSERT INTO ops.pipeline_runs (run_id, task_name, status, error_message) VALUES (gen_random_uuid(), 'ci_probe', 'failed', 'ci');"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -t -A -c "SELECT count(*) FROM ops.alerts WHERE source_task = 'ci_probe';" | grep -qx 1
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -c "INSERT INTO ops.quality_results (run_id, suite_name, success_percent, failed_expectations) VALUES (gen_random_uuid(), 'ci_suite', 50.0, 1);"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -t -A -c "SELECT count(*) FROM ops.alerts WHERE source_task = 'ci_suite';" | grep -qx 1
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -c "CALL ops.close_stuck_runs();"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -c "CALL ops.purge_old_runs(0);"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f sql/analysis/01_revenue_trend.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f sql/analysis/02_return_outliers.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f sql/analysis/03_ramadan_lift.sql
 
   plpgsql:
     runs-on: ubuntu-latest
@@ -174,12 +174,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update -y && sudo apt-get install -y postgresql-client
-      - run: psql -h localhost -U postgres -f sql/ops_schema.sql
-      - run: psql -h localhost -U postgres -f tests/fixtures/seed_gold_clean.sql
-      - run: psql -h localhost -U postgres -f sql/plpgsql_checks/source_checks.sql
-      - run: psql -h localhost -U postgres -f sql/plpgsql_checks/gold_checks.sql
-      - run: psql -h localhost -U postgres -f tests/fixtures/seed_gold_bad.sql
-      - run: "! psql -h localhost -U postgres -f sql/plpgsql_checks/gold_checks.sql"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f sql/ops_schema.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f tests/fixtures/seed_gold_clean.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f sql/plpgsql_checks/source_checks.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f sql/plpgsql_checks/gold_checks.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f tests/fixtures/seed_gold_bad.sql
+      - run: "! psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f sql/plpgsql_checks/gold_checks.sql"
 
   dbt:
     runs-on: ubuntu-latest
@@ -206,8 +206,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
       - run: sudo apt-get update -y && sudo apt-get install -y postgresql-client
-      - run: psql -h localhost -U postgres -c "CREATE DATABASE lotus_gold_staging;"
-      - run: psql -h localhost -U postgres -d lotus_gold_staging -f tests/fixtures/seed_gold_clean.sql
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -c "CREATE DATABASE lotus_gold_staging;"
+      - run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d lotus_gold_staging -f tests/fixtures/seed_gold_clean.sql
       - run: uv run dbt run --project-dir dbt --target staging
       - run: uv run dbt test --project-dir dbt --target staging
 
