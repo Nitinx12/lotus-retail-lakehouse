@@ -1,0 +1,6 @@
+@LotusApi_HostAddress = http://localhost:5124
+
+GET {{LotusApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

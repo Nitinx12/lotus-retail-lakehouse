@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1.7
+
+ARG DOTNET_VERSION=8.0
+
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
+WORKDIR /src
+COPY dotnet-api/ ./
+RUN dotnet publish LotusApi/LotusApi.csproj -c Release -o /app \
+    -p:VersionPrefix=${IMAGE_VERSION:-0.1.0}
+
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
+ENV ASPNETCORE_URLS=http://+:8082 \
+    DOTNET_RUNNING_IN_CONTAINER=true
+WORKDIR /app
+COPY --from=build /app .
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends wget \
+  && rm -rf /var/lib/apt/lists/*
+USER app
+EXPOSE 8082
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8082/api/health/live || exit 1
+ENTRYPOINT ["dotnet", "LotusApi.dll"]

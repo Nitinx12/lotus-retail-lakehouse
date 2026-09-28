@@ -26,3 +26,6 @@ r/renv/library/
 *.toc
 node_modules
 docker/docker-compose.yml
+dotnet-api/**/bin/
+dotnet-api/**/obj/
+dotnet-api/**/TestResults/
