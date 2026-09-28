@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+* Add four executed notebooks under `notebooks`: Bronze EDA, Silver cleaning,
+  Gold marts, and an end to end pipeline rebuild with quality gates green.
+* Add `jupyter` and `matplotlib` to project dependencies for notebook
+  execution and charts.
+* Rebuild the dashboard on a pooled engine with cached queries, shared
+  Plotly charts, Revenue Returns Seasonality and Ops pages, and unit tests
+  for helpers and charts. Drop the duplicate ops page and the pinned
+  dashboard requirements file, the Docker image resolves env from
+  `pyproject.toml`.
+* Add `report`, `dashboard`, and `notebooks` targets to the Makefile with
+  matching `run_pipeline.bat` branches on Windows.
+* Add versioned SQL objects with run order: serving and ops indexes,
+  alert and guard trigger functions plus triggers, stuck run and purge
+  procedures, a looping mart reconciler, and analyst queries. New
+  `sql-ops` and `sql-gold` stages in `main.py` apply them, and fix stage
+  scripts to resolve imports through `PYTHONPATH`.
+
 * Fix customer Type 2 tracking to hash region and loyalty tier only, so a city
   move no longer mints a spurious version. Rebuild the Silver SCD tables after
   pulling this change because hashes from the old three column set never match

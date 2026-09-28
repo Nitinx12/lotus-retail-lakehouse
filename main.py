@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 STAGES: dict[str, list[str]] = {
     "initops": ["scripts/init_ops.py"],
+    "sql-ops": ["scripts/run_sql.py", "--db", "ops"],
+    "sql-gold": ["scripts/run_sql.py", "--db", "gold"],
     "extract": ["scripts/extract_to_mongo.py"],
     "plpgsql-source": ["scripts/run_plpgsql.py", "--suite", "source"],
     "bronze": ["scripts/run_bronze.py"],
@@ -24,12 +28,14 @@ STAGES: dict[str, list[str]] = {
 EXPANSIONS: dict[str, list[str]] = {
     "gx": ["gx-bronze", "gx-silver", "gx-gold"],
     "all": [
+        "sql-ops",
         "plpgsql-source",
         "bronze",
         "silver",
         "scd2",
         "gold",
         "quality",
+        "sql-gold",
         "publish",
         "plpgsql-gold",
     ],
@@ -57,7 +63,10 @@ def run_stage(name: str) -> int:
     if name not in STAGES:
         print(f"unknown stage: {name}", file=sys.stderr)
         return 2
-    proc = subprocess.run([sys.executable, *STAGES[name]], check=False)
+    env = dict(os.environ)
+    root = str(Path(__file__).resolve().parent)
+    env["PYTHONPATH"] = root + os.pathsep + env.get("PYTHONPATH", "")
+    proc = subprocess.run([sys.executable, *STAGES[name]], check=False, env=env)
     return proc.returncode
 
 

@@ -1,0 +1,175 @@
+---
+title: "Lotus Retail Deep Dive Statistical Analysis"
+subtitle: "Revenue trend, return rate, and Ramadan seasonality (exploratory)"
+author: "Lotus Retail Lakehouse"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    theme: flatly
+    fig-width: 8
+    fig-height: 4.5
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+source("R/00_config.R")
+source("R/01_load_data.R")
+source("R/02_revenue_analysis.R")
+source("R/03_return_analysis.R")
+source("R/04_seasonality_analysis.R")
+source("R/05_chart_theme.R")
+
+con <- get_lotus_connection()
+```
+
+This notebook is the working analyst copy: every chart, every diagnostic, all code visible (click "Code" to expand). It feeds the curated code free version in `report.qmd`, which is what actually gets rendered to PDF for stakeholders. In production this runs as the `A10: R analysis` task in the Airflow DAG, reading the dbt marts in the `marts` schema after `dbt run` / `dbt test` (`A9`) has passed.
+
+## 1. Revenue Trend
+
+```{r revenue-load}
+rev_df <- get_revenue_by_store_month(con)
+trend <- revenue_trend_summary(rev_df)
+```
+
+### 1.1 Company wide monthly revenue
+
+```{r revenue-plot}
+ggplot(trend, aes(month_start, revenue)) +
+  geom_line(color = lotus_palette[1], linewidth = 1) +
+  geom_point(color = lotus_palette[1], size = 1.5) +
+  scale_y_continuous(labels = fmt_egp) +
+  labs(
+    title = "Monthly Revenue", x = NULL, y = "Revenue",
+    caption = "Source: marts.revenue_by_store_month"
+  ) +
+  theme_lotus()
+```
+
+### 1.2 MoM and YoY growth
+
+```{r revenue-growth}
+trend |>
+  select(month_start, mom_growth, yoy_growth, margin) |>
+  tail(12) |>
+  kbl(digits = 3, col.names = c("Month", "MoM Growth", "YoY Growth", "Margin")) |>
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+### 1.3 Trend and seasonal decomposition (STL)
+
+```{r revenue-stl, fig.height=6}
+decomp <- revenue_stl_decomposition(rev_df)
+plot(decomp$stl, main = NA)
+```
+
+The seasonal component isolates the recurring within year pattern (see Section 3 for whether Ramadan explains it); the remainder is what is left after trend and seasonality are removed. Large spikes in the remainder are worth investigating as one off events rather than trend.
+
+### 1.4 Store concentration
+
+```{r revenue-concentration}
+conc <- store_concentration(rev_df, top_n = 3)
+glue("Top {conc$top_n} stores account for {fmt_pct(conc$top_n_share)} of total revenue.")
+
+ggplot(conc$by_store, aes(reorder(store_id, -revenue), revenue)) +
+  geom_col(fill = lotus_palette[2]) +
+  scale_y_continuous(labels = fmt_egp) +
+  labs(title = "Revenue by Store", x = NULL, y = "Revenue") +
+  theme_lotus() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### 1.5 Three month forward look (directional, not a production forecast)
+
+```{r revenue-forecast}
+fc <- revenue_forecast_by_store(rev_df, h = 3)
+fc |> kbl(digits = 0) |> kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+## 2. Return Rate
+
+```{r return-load}
+ret_df <- get_return_rate_by_product(con)
+outliers <- return_rate_outliers(ret_df)
+chart_df <- top_return_products(outliers, top_n = 15)
+```
+
+```{r return-plot}
+ggplot(chart_df, aes(reorder(product_id, return_rate), return_rate, fill = flagged)) +
+  geom_col() +
+  geom_hline(yintercept = mean(outliers$return_rate, na.rm = TRUE), linetype = "dashed", color = "grey40") +
+  coord_flip() +
+  scale_y_continuous(labels = fmt_pct) +
+  scale_fill_manual(
+    values = c("FALSE" = lotus_palette[2], "TRUE" = lotus_palette[4]),
+    labels = c("Normal", "Outlier")
+  ) +
+  labs(
+    title = "Return Rate by Product (Top 15 by Volume)", x = NULL, y = "Return Rate",
+    caption = "Dashed line = portfolio average"
+  ) +
+  theme_lotus()
+```
+
+```{r return-table}
+ret_tbl <- chart_df |>
+  select(product_id, times_ordered, times_returned, return_rate, z_score, flagged) |>
+  kbl(digits = c(NA, 0, 0, 3, 2, NA)) |>
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+if (any(chart_df$flagged)) ret_tbl <- row_spec(ret_tbl, which(chart_df$flagged), bold = TRUE, color = lotus_palette[4])
+ret_tbl
+```
+
+### 2.1 Return volume Pareto
+
+```{r return-pareto}
+pareto <- return_volume_pareto(ret_df)
+ggplot(head(pareto, 20), aes(reorder(product_id, -times_returned))) +
+  geom_col(aes(y = times_returned), fill = lotus_palette[3]) +
+  geom_line(aes(y = cum_share * max(pareto$times_returned), group = 1), color = lotus_palette[4], linewidth = 1) +
+  scale_y_continuous(sec.axis = sec_axis(~ . / max(pareto$times_returned), labels = fmt_pct, name = "Cumulative share")) +
+  labs(title = "Return Volume Pareto (Top 20 Products)", x = NULL, y = "Returns") +
+  theme_lotus() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## 3. Ramadan Seasonality
+
+```{r season-load}
+season_df <- get_ramadan_seasonality(con)
+tagged <- tag_ramadan_windows(season_df)
+comp <- ramadan_period_comparison(tagged)
+```
+
+```{r season-plot}
+ggplot(tagged |> filter(period != "Non-seasonal"), aes(period, revenue, fill = period)) +
+  geom_boxplot(alpha = 0.85, outlier.alpha = 0.3) +
+  scale_y_continuous(labels = fmt_egp) +
+  scale_fill_manual(values = lotus_palette[1:3]) +
+  labs(title = "Monthly Revenue: Pre Versus During Versus Post Ramadan", x = NULL, y = "Monthly Revenue") +
+  theme_lotus() +
+  theme(legend.position = "none")
+```
+
+```{r season-anova}
+comp$summary |> kbl(digits = 0) |> kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+```{r season-pvalue}
+if (is.na(comp$p_value)) "Not enough monthly data for a significance test." else glue("ANOVA p value across periods: {signif(comp$p_value, 3)}.")
+```
+
+### 3.1 Year over year lift stability
+
+```{r season-yoy}
+yoy <- ramadan_yoy_lift(tagged)
+yoy |> kbl(digits = c(0, 0, 0, 3)) |> kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+```{r cleanup}
+if (!is.null(con)) DBI::dbDisconnect(con)
+```

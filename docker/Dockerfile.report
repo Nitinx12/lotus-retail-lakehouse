@@ -4,14 +4,17 @@ ARG R_VERSION=4.5.1
 
 FROM rocker/r-ver:${R_VERSION} AS runtime
 ARG DEBIAN_FRONTEND=noninteractive
+ARG QUARTO_VERSION=1.7.0
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      bash ca-certificates pandoc latexmk \
+      bash ca-certificates curl pandoc latexmk \
       texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-xetex \
       postgresql-client libpq-dev \
- && rm -rf /var/lib/apt/lists/*
+ && curl -fsSL -o /tmp/quarto.deb "https://github.com/quarto-dev/quarto-cli/releases/download/v${QUARTO_VERSION}/quarto-${QUARTO_VERSION}-linux-amd64.deb" \
+ && apt-get install -y --no-install-recommends /tmp/quarto.deb \
+ && rm -rf /var/lib/apt/lists/* /tmp/quarto.deb
 RUN install2.r --error --skipinstalled --ncpus -1 \
-      DBI RPostgres dplyr ggplot2 lubridate scales knitr rmarkdown \
+      DBI RPostgres dplyr tidyr ggplot2 lubridate scales glue forecast kableExtra knitr rmarkdown \
  && rm -rf /tmp/downloaded_packages
 RUN useradd --create-home --uid 1000 app \
  && mkdir -p /app/reports /app/logs \

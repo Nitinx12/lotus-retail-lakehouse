@@ -36,3 +36,12 @@ CREATE TABLE IF NOT EXISTS ops.schema_changes (
     column_name TEXT,
     change_type TEXT NOT NULL
 );
+
+-- records fired alerts for failures and quality drops
+CREATE TABLE IF NOT EXISTS ops.alerts (
+    alert_id BIGSERIAL PRIMARY KEY,
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    source_task TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'warning',
+    message TEXT NOT NULL
+);

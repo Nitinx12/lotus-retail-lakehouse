@@ -1,48 +1,40 @@
-# lotus retail view over the governed dbt marts
+# lotus retail home page over the governed dbt marts
 from __future__ import annotations
 
-import os
-
 import streamlit as st
-from lib.db import pool_dsn, read_frame
+from lib import charts, db
 
-
-# loads the marts through the pooler
-def load_marts(dsn: str) -> dict:
-    return {
-        "revenue": read_frame(
-            dsn, "SELECT * FROM marts.revenue_by_store_month ORDER BY month"
-        ),
-        "returns": read_frame(
-            dsn, "SELECT * FROM marts.return_rate_by_product ORDER BY return_rate DESC"
-        ),
-        "ramadan": read_frame(
-            dsn, "SELECT * FROM marts.ramadan_seasonality ORDER BY month"
-        ),
-        "customers": read_frame(
-            dsn, "SELECT count(*) AS masked_customers FROM gold.dim_customers_masked"
-        ),
-    }
-
-
+st.set_page_config(page_title="Lotus Retail", page_icon="🏬", layout="wide")
 st.title("Lotus Retail")
-dsn = pool_dsn(
-    os.getenv("POSTGRES_GOLD_DB", "lotus_gold_dev"),
-    os.getenv("POSTGRES_GOLD_USER", "lotus_app"),
-    os.getenv("POSTGRES_GOLD_PASSWORD", ""),
-)
-marts = load_marts(dsn)
 
-st.header("Revenue by store and month")
-st.dataframe(marts["revenue"])
-st.bar_chart(marts["revenue"].groupby("month")["revenue"].sum())
+freshness = db.get_gold_freshness_hours()
+if db.is_stale(freshness):
+    st.error("Gold is stale, check the Ops page for the latest run.")
+else:
+    st.success(f"Gold is fresh, last refreshed {freshness:.1f}h ago.")
 
-st.header("Return rate by product")
-st.dataframe(marts["returns"].head(20))
+rev = db.get_revenue_by_store_month()
+if rev.empty:
+    st.warning("No revenue data available.")
+    st.stop()
 
-st.header("Ramadan seasonality")
-st.dataframe(marts["ramadan"])
-st.bar_chart(marts["ramadan"].groupby("month")["revenue"].sum())
+total_revenue = rev["revenue"].sum()
+total_orders = rev["orders"].sum()
+top_store = rev.groupby("store_id")["revenue"].sum().idxmax()
 
-st.header("Masked customers")
-st.dataframe(marts["customers"])
+ret = db.get_return_rate_by_product()
+mean_rate = ret["return_rate"].mean() if not ret.empty else 0.0
+
+cards = st.columns(3)
+with cards[0]:
+    charts.kpi_delta("Total revenue", f"EGP {total_revenue:,.0f}")
+with cards[1]:
+    charts.kpi_delta("Total orders", f"{int(total_orders):,}")
+with cards[2]:
+    charts.kpi_delta("Mean return rate", f"{mean_rate:.2%}")
+
+st.plotly_chart(charts.revenue_trend_line(rev), use_container_width=True)
+st.plotly_chart(charts.store_ranking_bar(rev), use_container_width=True)
+
+masked = db.get_customers_masked()
+st.caption(f"Masked customer records available: {len(masked):,}.")

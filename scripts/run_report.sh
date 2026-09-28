@@ -1,22 +1,12 @@
-# renders the r analysis and builds the latex report
+#!/usr/bin/env bash
 set -euo pipefail
-if [ -f .env ]; then set -a; source .env; set +a; fi
-mkdir -p logs "${REPORT_OUTPUT_DIR:-reports}"
-REPORT_OUTPUT_DIR="${REPORT_OUTPUT_DIR:-reports}"
-case "$REPORT_OUTPUT_DIR" in
-  /*) ;;
-  *) REPORT_OUTPUT_DIR="$(pwd)/$REPORT_OUTPUT_DIR" ;;
-esac
-export REPORT_OUTPUT_DIR
-if [ ! -f r/analysis.Rmd ]; then
-  echo "report sources not present, skipping" | tee logs/report.log
-  exit 0
-fi
-if ! command -v Rscript >/dev/null 2>&1; then
-  echo "Rscript not found, skipping report" | tee logs/report.log
-  exit 0
-fi
-Rscript r/render.R 2>&1 | tee logs/report.log
-if command -v latexmk >/dev/null 2>&1; then
-  latexmk -pdf -outdir="${REPORT_OUTPUT_DIR:-reports}" "${REPORT_OUTPUT_DIR:-reports}"/report.tex 2>&1 | tee -a logs/report.log
-fi
+# renders the r analysis and the latex report
+cd "$(dirname "$0")/../r"
+: "${LOTUS_ENV:=dev}"
+export REPORT_OUTPUT_DIR="${REPORT_OUTPUT_DIR:-../output/${LOTUS_ENV}/report}"
+echo "[run_report] environment=${LOTUS_ENV}"
+echo "[A10] Rendering deep dive R analysis (HTML)..."
+quarto render analysis.qmd --output-dir "../output/${LOTUS_ENV}/analysis"
+echo "[A11] Rendering stakeholder report (Quarto -> LaTeX -> PDF via latexmk)..."
+quarto render report.qmd --output-dir "../output/${LOTUS_ENV}/report"
+echo "[run_report] Done."

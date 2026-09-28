@@ -1,6 +1,6 @@
 DEFAULT_GOAL := help
 
-.PHONY: install lint format test unit smoke dag integration pipeline publish quality docker-build docker-up help
+.PHONY: install lint format test unit smoke dag integration pipeline publish quality report dashboard notebooks docker-build docker-up help
 
 # install project dependencies with uv
 install:
@@ -46,6 +46,18 @@ publish:
 # run python quality gates
 quality:
 	uv run python main.py quality
+
+# render the r analysis and stakeholder report
+report:
+	bash scripts/run_report.sh
+
+# launch the streamlit dashboard locally
+dashboard:
+	uv run streamlit run dashboard/app.py
+
+# execute all notebooks in place
+notebooks:
+	uv run jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=600 notebooks/*.ipynb
 
 # build pipeline dashboard and report images
 docker-build:

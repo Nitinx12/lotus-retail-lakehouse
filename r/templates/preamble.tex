@@ -1,0 +1,36 @@
+% preamble.tex — professional report styling, included via
+% include-in-header in report.qmd's YAML.
+
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+
+% Brand colors, matched to the ggplot2 palette in R/05_chart_theme.R
+\definecolor{lotusnavy}{HTML}{1B4B66}
+\definecolor{lotusblue}{HTML}{2E86AB}
+\definecolor{lotusgrey}{HTML}{5A5A5A}
+
+% Section headings
+\titleformat{\section}{\Large\bfseries\color{lotusnavy}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{lotusblue}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.8em}
+
+% Header / footer
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyhead[L]{\small\color{lotusgrey}Lotus Retail Lakehouse}
+\fancyhead[R]{\small\color{lotusgrey}\leftmark}
+\fancyfoot[C]{\small\color{lotusgrey}\thepage}
+\fancyfoot[R]{\small\color{lotusgrey}Confidential}
+
+% Table styling defaults
+\renewcommand{\arraystretch}{1.15}
+
+% Caption styling
+\usepackage[font={small,color=lotusgrey},labelfont={bf,color=lotusnavy}]{caption}

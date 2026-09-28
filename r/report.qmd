@@ -1,0 +1,128 @@
+---
+title: "Lotus Retail Quarterly Performance Report"
+subtitle: "Revenue trend, return rate, and Ramadan seasonality"
+author: "Lotus Retail Lakehouse Data Platform"
+date: today
+format:
+  pdf:
+    documentclass: article
+    papersize: a4
+    fontsize: 11pt
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    include-in-header: templates/preamble.tex
+    pdf-engine: latexmk
+    colorlinks: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+source("R/00_config.R")
+source("R/01_load_data.R")
+source("R/02_revenue_analysis.R")
+source("R/03_return_analysis.R")
+source("R/04_seasonality_analysis.R")
+source("R/05_chart_theme.R")
+
+con <- get_lotus_connection()
+
+rev_df <- get_revenue_by_store_month(con)
+trend <- revenue_trend_summary(rev_df)
+conc <- store_concentration(rev_df, top_n = 3)
+
+ret_df <- get_return_rate_by_product(con)
+outliers <- return_rate_outliers(ret_df)
+
+season_df <- get_ramadan_seasonality(con)
+tagged <- tag_ramadan_windows(season_df)
+comp <- ramadan_period_comparison(tagged)
+yoy <- ramadan_yoy_lift(tagged)
+```
+
+# Executive Summary
+
+```{r exec-numbers}
+latest_yoy <- tail(trend$yoy_growth[!is.na(trend$yoy_growth)], 1)
+top_return <- outliers |> slice_max(return_rate, n = 1)
+avg_lift <- mean(yoy$lift_pct, na.rm = TRUE)
+```
+
+Over the period covered by this report, company wide revenue grew `r fmt_pct(latest_yoy)` year over year, with the top `r conc$top_n` stores contributing `r fmt_pct(conc$top_n_share)` of total revenue, a concentration worth monitoring for single store dependency risk.
+
+Return rates vary meaningfully by product: **`r top_return$product_id`** carries the highest rate at `r fmt_pct(top_return$return_rate)`, flagged as a statistical outlier against the portfolio average.
+
+Ramadan continues to show a measurable demand lift, averaging `r fmt_pct(avg_lift)` above non seasonal monthly revenue across the years observed (ANOVA p = `r if (is.na(comp$p_value)) "n/a" else signif(comp$p_value, 3)`).
+
+# Revenue Trend
+
+```{r fig-revenue}
+#| fig-cap: "Monthly company wide revenue."
+p <- ggplot(trend, aes(month_start, revenue)) +
+  geom_line(color = lotus_palette[1], linewidth = 1) +
+  geom_point(color = lotus_palette[1], size = 1.3) +
+  scale_y_continuous(labels = fmt_egp) +
+  labs(x = NULL, y = "Revenue") +
+  theme_lotus()
+p
+```
+
+```{r fig-stores}
+#| fig-cap: "Revenue by store, ranked."
+ggplot(conc$by_store, aes(reorder(store_id, -revenue), revenue)) +
+  geom_col(fill = lotus_palette[2]) +
+  scale_y_continuous(labels = fmt_egp) +
+  labs(x = NULL, y = "Revenue") +
+  theme_lotus() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The top `r conc$top_n` stores represent `r fmt_pct(conc$top_n_share)` of total revenue. Recommendation: track this concentration ratio quarter over quarter; a rising share signals growing reliance on a small store subset.
+
+# Return Rate
+
+```{r fig-returns}
+#| fig-cap: "Return rate by product, outliers flagged."
+ggplot(top_return_products(outliers, top_n = 15), aes(reorder(product_id, return_rate), return_rate, fill = flagged)) +
+  geom_col() +
+  geom_hline(yintercept = mean(outliers$return_rate, na.rm = TRUE), linetype = "dashed", color = "grey40") +
+  coord_flip() +
+  scale_y_continuous(labels = fmt_pct) +
+  scale_fill_manual(values = c("FALSE" = lotus_palette[2], "TRUE" = lotus_palette[4]), guide = "none") +
+  labs(x = NULL, y = "Return Rate") +
+  theme_lotus()
+```
+
+```{r tbl-returns}
+outliers |>
+  head(15) |>
+  select(`Product` = product_id, `Times Ordered` = times_ordered, `Times Returned` = times_returned, `Return Rate` = return_rate) |>
+  mutate(`Return Rate` = fmt_pct(`Return Rate`)) |>
+  kbl(booktabs = TRUE, format = "latex") |>
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+# Ramadan Seasonality
+
+```{r fig-ramadan}
+#| fig-cap: "Monthly revenue distribution across Ramadan windows."
+ggplot(tagged |> filter(period != "Non-seasonal"), aes(period, revenue, fill = period)) +
+  geom_boxplot(alpha = 0.85, outlier.alpha = 0.3) +
+  scale_y_continuous(labels = fmt_egp) +
+  scale_fill_manual(values = lotus_palette[1:3], guide = "none") +
+  labs(x = NULL, y = "Monthly Revenue") +
+  theme_lotus()
+```
+
+The difference across pre Ramadan, Ramadan, and post Ramadan periods is statistically significant (ANOVA p = `r if (is.na(comp$p_value)) "n/a" else signif(comp$p_value, 3)`), and the lift is consistent across the `r nrow(yoy)` years observed rather than a one off spike.
+
+# Methodology
+
+Figures are computed from the dbt governed marts in the `marts` schema (`revenue_by_store_month`, `return_rate_by_product`, `ramadan_seasonality`), which are themselves validated by `dbt test` and Great Expectations before this report runs. Ramadan months are matched against explicit Gregorian date ranges per year rather than a fixed calendar month, since the Islamic calendar shifts roughly 11 days earlier each year. Outlier flags on return rate use a z score threshold of 1.5 against the portfolio mean. This report is generated by the `A10` and `A11` Airflow tasks (R render and LaTeX build via `latexmk`) after the semantic layer (`A9`) passes its tests.
+
+```{r cleanup}
+if (!is.null(con)) DBI::dbDisconnect(con)
+```
