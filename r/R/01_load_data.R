@@ -2,6 +2,18 @@ source("R/00_config.R")
 
 set.seed(42)
 
+# true only when demo rendering is explicitly opted in
+demo_allowed <- function() {
+  tolower(Sys.getenv("LOTUS_ALLOW_DEMO", unset = "0")) %in% c("1", "true", "yes")
+}
+
+# refuses to render demo data as real unless demo mode is opted in
+require_demo_opt_in <- function() {
+  if (!demo_allowed()) {
+    stop("no warehouse connection and LOTUS_ALLOW_DEMO is unset; refusing demo data")
+  }
+}
+
 # stops with a clear message when expected mart columns are missing
 require_columns <- function(df, cols, mart) {
   missing <- setdiff(cols, names(df))
@@ -28,6 +40,7 @@ get_revenue_by_store_month <- function(con = NULL) {
       orders = as.integer(orders)
     ))
   }
+  require_demo_opt_in()
   stores <- paste0("Store_", sprintf("%02d", 1:12))
   months <- seq(as_date("2022-01-01"), as_date("2024-12-01"), by = "month")
   expand_grid(store_id = stores, month_start = months) |>
@@ -55,6 +68,7 @@ get_return_rate_by_product <- function(con = NULL) {
       return_rate = as.numeric(return_rate)
     ))
   }
+  require_demo_opt_in()
   base_rates <- c(0.11, 0.08, 0.05, 0.02, 0.07, 0.06)
   tibble(product_id = paste0("P", sprintf("%04d", 1:60))) |>
     mutate(
@@ -78,6 +92,7 @@ get_ramadan_seasonality <- function(con = NULL) {
       orders = as.integer(orders)
     ))
   }
+  require_demo_opt_in()
   months <- seq(as_date("2022-01-01"), as_date("2024-12-01"), by = "month")
   tibble(month_start = months) |>
     mutate(
