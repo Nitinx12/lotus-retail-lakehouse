@@ -47,7 +47,7 @@ def gold_conn() -> psycopg2.extensions.connection:
             os.getenv("POSTGRES_GOLD_HOST", "localhost"),
             int(os.getenv("POSTGRES_GOLD_PORT", "5432")),
             os.getenv("POSTGRES_GOLD_DB", "lotus_gold_dev"),
-            os.getenv("POSTGRES_GOLD_USER", "lotus_app"),
+            os.getenv("POSTGRES_GOLD_USER", "lotus_pipeline"),
             os.getenv("POSTGRES_GOLD_PASSWORD", ""),
         ),
         connect_timeout=5,
@@ -72,7 +72,7 @@ def ops_conn() -> psycopg2.extensions.connection:
 def gold_engine_url() -> str:
     return (
         "postgresql+psycopg2://"
-        f"{os.getenv('POSTGRES_GOLD_USER', 'lotus_app')}"
+        f"{os.getenv('POSTGRES_GOLD_USER', 'lotus_pipeline')}"
         f":{os.getenv('POSTGRES_GOLD_PASSWORD', '')}"
         f"@{os.getenv('POSTGRES_GOLD_HOST', 'localhost')}"
         f":{os.getenv('POSTGRES_GOLD_PORT', '5432')}"

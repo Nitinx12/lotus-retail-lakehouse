@@ -60,7 +60,7 @@ def ensure_database(conn: psycopg2.extensions.connection, db: str, owner: str) -
 # applies the ops ddl file and records the init run
 def main() -> None:
     gold_db = os.getenv("POSTGRES_GOLD_DB", "lotus_gold_dev")
-    gold_user = os.getenv("POSTGRES_GOLD_USER", "lotus_app")
+    gold_user = os.getenv("POSTGRES_GOLD_USER", "lotus_pipeline")
     gold_pw = os.getenv("POSTGRES_GOLD_PASSWORD", "")
     ops_db = os.getenv("POSTGRES_OPS_DB", "lotus_ops_dev")
     ops_user = os.getenv("POSTGRES_OPS_USER", "lotus_ops")

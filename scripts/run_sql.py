@@ -47,7 +47,7 @@ STEPS_GOLD = [
 # opens a warehouse connection for the given prefix
 def warehouse_conn(prefix: str) -> psycopg2.extensions.connection:
     short = prefix.split("_")[-1].lower()
-    default_user = "lotus_ops" if short == "ops" else "lotus_app"
+    default_user = "lotus_ops" if short == "ops" else "lotus_pipeline"
     return psycopg2.connect(
         dsn=build_dsn(
             os.getenv(f"{prefix}_HOST", "localhost"),
