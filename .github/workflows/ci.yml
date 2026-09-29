@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   PGPASSWORD: postgres
@@ -15,6 +19,7 @@ concurrency:
 jobs:
   entrypoints:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -25,11 +30,28 @@ jobs:
       - run: make -n sql
       - run: make -n report
       - run: make -n notebooks
+      - run: make -n dbt
+      - run: make -n backup
+      - run: make -n gate
+      - run: make -n health
+      - run: make -n security
+      - run: make -n inspect
+      - run: bash scripts/restore_postgres.sh 2>&1 | grep -q Usage
       - run: test -f run_pipeline.bat
       - run: cp .env.example .env
       - run: bash scripts/docker_up.sh config
+
+  shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n scripts/*.sh
+      - run: git diff --check
+
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -38,6 +60,7 @@ jobs:
 
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -46,6 +69,7 @@ jobs:
 
   dag-integrity:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -54,6 +78,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -84,6 +109,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -94,6 +120,7 @@ jobs:
 
   sql:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -159,6 +186,7 @@ jobs:
 
   plpgsql:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
@@ -183,6 +211,7 @@ jobs:
 
   dbt:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -213,6 +242,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: docker build -f docker/Dockerfile.pipeline --target test -t lotus-pipeline:ci .
@@ -224,6 +254,7 @@ jobs:
 
   dotnet-api:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
