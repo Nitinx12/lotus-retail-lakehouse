@@ -25,15 +25,22 @@ def admin_conn() -> psycopg2.extensions.connection:
 
 
 # ensures a login role exists with the given password
-def ensure_role(conn: psycopg2.extensions.connection, user: str, password: str) -> None:
+def ensure_role(
+    conn: psycopg2.extensions.connection,
+    user: str,
+    password: str,
+    login: bool = True,
+) -> None:
     conn.autocommit = True
     with conn.cursor() as cur:
         cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (user,))
         exists = cur.fetchone() is not None
         if not exists:
             cur.execute(
-                sql.SQL("CREATE ROLE {} WITH LOGIN PASSWORD {}").format(
-                    sql.Identifier(user), sql.Literal(password)
+                sql.SQL("CREATE ROLE {} WITH {}LOGIN PASSWORD {}").format(
+                    sql.Identifier(user),
+                    sql.SQL("") if login else sql.SQL("NO"),
+                    sql.Literal(password),
                 )
             )
         elif password:
@@ -67,11 +74,16 @@ def main() -> None:
     ops_pw = os.getenv("POSTGRES_OPS_PASSWORD", "")
     pii_user = os.getenv("POSTGRES_PII_READER_USER", "lotus_pii_reader")
     pii_pw = os.getenv("POSTGRES_PII_READER_PASSWORD", "")
+    pipe_pw = os.getenv("LOTUS_PIPELINE_PASSWORD", "")
+    api_pw = os.getenv("LOTUS_API_READER_PASSWORD", "")
 
     conn = admin_conn()
     try:
         for user, pw in [(gold_user, gold_pw), (ops_user, ops_pw), (pii_user, pii_pw)]:
             ensure_role(conn, user, pw)
+        for user, pw in [("lotus_pipeline", pipe_pw), ("lotus_api_reader", api_pw)]:
+            ensure_role(conn, user, pw)
+        ensure_role(conn, "pii_reader", "", login=False)
         ensure_database(conn, gold_db, gold_user)
         ensure_database(conn, ops_db, ops_user)
         conn.autocommit = True
@@ -98,8 +110,8 @@ def main() -> None:
                 (run_id, "ops_init", "success", 0, 0),
             )
     gold_dsn = build_dsn(
-        os.getenv("POSTGRES_OPS_HOST", "localhost"),
-        int(os.getenv("POSTGRES_OPS_PORT", "5432")),
+        os.getenv("POSTGRES_GOLD_HOST", os.getenv("POSTGRES_OPS_HOST", "localhost")),
+        int(os.getenv("POSTGRES_GOLD_PORT", os.getenv("POSTGRES_OPS_PORT", "5432"))),
         gold_db,
         gold_user,
         gold_pw,
