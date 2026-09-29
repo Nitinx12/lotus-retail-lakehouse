@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+* Audit fixes: pipeline test image now ships `scripts` and `dashboard` so the
+  container unit run passes; Gold writers default to the pipeline role so
+  local publish, SQL apply, and dbt work without overrides; the app role
+  loses direct access to unmasked customers while the masked view keeps
+  working; publish reissues the customer revokes every run; run durations
+  are real through statement timestamps with `ended_at` set on every finish;
+  GX gates run inside `main.py all`; bronze total compares against
+  checkpoints; silver drops null keys before dedupe keeping the last row;
+  SCD2 fails loudly on duplicate current rows; quality cross checks the
+  served dbt revenue mart; R refuses demo data without `LOTUS_ALLOW_DEMO`;
+  report wrappers write under `reports/`; DAG drops the daily git push and
+  shapes SLA alerts; CI builds airflow and API images too.
+* Correct ARCHITECTURE for five ops tables, the extra Gold checks task, the
+  API layout row, qmd names, schema paths, and mart naming.
+
 * Fix the pooler service to use a published image tag with the entrypoint
   variable names it expects, so `pgbouncer` starts instead of crash looping.
 * Map the stack host ports away from common local services: Postgres on 5434,

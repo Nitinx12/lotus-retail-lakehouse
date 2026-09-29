@@ -25,7 +25,8 @@ graph TD
         A5 --> A6[Gold: star schema, optimize, Z order]
         A6 --> A7[Great Expectations: Gold suite]
         A7 --> A8[JDBC write to Postgres Gold]
-        A8 --> A9[dbt run and dbt test: semantic layer]
+        A8 --> A8B[PL pgSQL Gold checks]
+        A8B --> A9[dbt run and dbt test: semantic layer]
         A9 --> A10[R analysis]
         A10 --> A11[LaTeX report build]
         A9 --> A12[Streamlit refresh signal]
@@ -42,7 +43,7 @@ graph TD
     A7 -.results.-> OPS
     OPS --> MON[Streamlit: Pipeline Ops page]
     OPS --> ALERT[Slack / PagerDuty / Email]
-    A[Airflow SLA miss] --> ALERT
+    SLA[Airflow SLA miss] --> ALERT
 ```
 
 Every box is now an Airflow task with its own retry policy and timeout, not a step inside one long script. A failure at Silver retries twice on its own before it halts the DAG, shows up as failed in `ops.pipeline_runs`, and fires an alert (Section 12).
@@ -56,7 +57,8 @@ Airflow owns scheduling, dependency ordering, retries, and backfills. It calls i
 - `PythonOperator` tasks run the Great Expectations checkpoints and push results into `ops.quality_results`.
 - `BashOperator` tasks run `dbt run`, `dbt test`, the R render, the `latexmk` build, and the Docker build and push.
 - Each task gets `retries=2` with exponential backoff and a `sla` parameter, so a transient Mongo connection blip or a slow Databricks cluster start does not fail the whole run, and a task that blows past its expected duration raises an SLA miss that Airflow surfaces on its own, independent of the custom Streamlit ops page, and also routed to the alert channel (Section 12).
-- Backfills become a one line Airflow CLI command against a date range instead of a manual rerun of `run_all.sh`, which matters the day you need to reprocess three months of history after a Silver bug fix.
+- Backfills become a one line Airflow CLI command against a date range instead of a manual rerun of
+`python main.py all`, which matters the day you need to reprocess three months of history after a Silver bug fix.
 - The DAG is parameterized by environment (`dev`, `staging`, `prod`) via an Airflow Variable rather than hardcoded — see Section 11.
 - All credentials the operators need (Mongo URI, Databricks token, Postgres DSN, dbt profile secrets) are resolved through Airflow Connections backed by the secrets backend, never read from a plaintext file at DAG parse time (Section 10).
 
@@ -152,7 +154,7 @@ models/
 schema.yml   # column tests: not_null, unique, relationships
 ```
 
-`dbt run` builds the marts as views or tables inside Postgres, `dbt test` checks not null, uniqueness, and foreign key relationships as a second, SQL native layer of validation alongside Great Expectations, and `dbt docs serve` generates the lineage graph from source table to mart, which doubles as living documentation of the whole warehouse. The PL/pgSQL read only loops still run separately against the raw Gold tables, they check things dbt tests do not, like future order dates and negative return amounts.
+`dbt run` builds the marts as views or tables inside Postgres, `dbt test` checks not null, uniqueness, and foreign key relationships as a second, SQL native layer of validation alongside Great Expectations, and `dbt docs serve` generates the lineage graph from source table to mart, which doubles as living documentation of the whole warehouse. The dbt models use bare names (`revenue_by_store_month`) inside the `marts` schema, while the Spark builders in `src/gold` write `mart_*` parquet files that are not published; the served definition is the dbt one. The PL/pgSQL read only loops still run separately against the raw Gold tables, they check things dbt tests do not, like future order dates and negative return amounts.
 
 Streamlit and R connect through a connection pooler (PgBouncer) rather than directly against Postgres, so ad hoc dashboard queries don't compete one-for-one with the JDBC batch write and the dbt run for connection slots during a pipeline run.
 
@@ -174,7 +176,7 @@ Three environments — `dev`, `staging`, `prod` — share the same DAG and codeb
 
 ## 12. Monitoring, alerting, and SLAs
 
-Two tables in the Postgres `ops` schema:
+Five tables in the Postgres `ops` schema (`pipeline_runs`, `quality_results`, `schema_changes`, `extract_checkpoints`, plus `alerts` for fired notifications):
 
 ```sql
 create table ops.pipeline_runs (
@@ -205,7 +207,7 @@ Every Airflow task writes a `running` row on start and updates it on completion.
 
 **Alert routing.** A pipeline run marked `failed`, a quality suite dropping below its pass-rate threshold, an Airflow SLA miss, or a `schema_changes` insert all fire a Slack message (and, for a hard failure, a PagerDuty page) via a shared `notify_on_failure` callback registered on every task — this is distinct from the Streamlit ops page, which is for browsing history, not for being woken up at 2 AM.
 
-The Streamlit ops page (`pages/ops.py`) reads only these two tables plus `schema_changes`: task status badges, a duration chart per task, a row count trend so a silent drop is visible, the quality and dbt test pass rate over time, and a freshness banner that turns red once Gold is older than the SLA allows.
+The Streamlit ops page (`dashboard/pages/5_Ops.py`) reads only the ops tables plus `schema_changes`: task status badges, a duration chart per task, a row count trend so a silent drop is visible, the quality and dbt test pass rate over time, and a freshness banner that turns red once Gold is older than the SLA allows.
 
 ## 13. Reliability, backup, and disaster recovery
 
@@ -240,7 +242,7 @@ A read-only ASP.NET Core Web API sits **downstream of everything above** — it 
 - **Connection secrets.** Resolved the same way as every other credential in this project (Section 10): local dev reads `appsettings.Development.json`/`.env`, staging/prod pull the Postgres DSN from the same secrets backend (Vault / cloud secrets manager) at startup, never committed.
 - **Environments.** Follows the same `dev`/`staging`/`prod` parameterization as Section 11 — an `ASPNETCORE_ENVIRONMENT` value selects which connection string / schema the API resolves against, mirroring the `LOTUS_ENV` Airflow Variable.
 - **Observability.** Optionally reads (never writes) `ops.pipeline_runs` and `ops.quality_results` to expose a `/api/health/freshness` endpoint, so API consumers can check "is Gold current" without duplicating the Streamlit ops page's logic.
-- **Packaging.** Ships as its own `Dockerfile.api` alongside the existing pipeline/dashboard/report/airflow images (Section 16 repo layout), with its own image tag and its own entry in CI (Section 15) — `dotnet build` / `dotnet test` as an additional, independent CI job, not a change to the existing `pytest`/`dbt`/DAG-integrity jobs.
+- **Packaging.** Ships as its own `Dockerfile.api` alongside the existing pipeline/dashboard/report/airflow images (Section 17 repo layout), with its own image tag and its own entry in CI (Section 15) — `dotnet build` / `dotnet test` as an additional, independent CI job, not a change to the existing `pytest`/`dbt`/DAG-integrity jobs.
 
 This keeps the boundary clean: everything left of Postgres Gold in Section 2's diagram is unchanged; the API is just one more reader on the right-hand side, like Streamlit and R.
 
@@ -257,24 +259,31 @@ lotus-lakehouse/
     quality/                  # Great Expectations suite definitions
     ops/                      # pipeline_runs, quality_results, schema_changes, alert callback
   dbt/
-    models/marts/
-    schema.yml
+    models/marts/             # revenue_by_store_month, return_rate_by_product, ramadan_seasonality
+    models/schema.yml
+    models/sources.yml
   sql/
     plpgsql_checks/
     ops_schema.sql
     security/                 # roles, grants, masked views
+    functions/ procedures/ triggers/ index/ analysis/
   r/
-    analysis.Rmd
+    analysis.qmd
+    report.qmd
+    R/                        # config, loaders, analysis scripts
   scripts/
-    run_ingest.sh
-    run_silver.sh
-    run_gold.sh
-    run_quality_gate.sh
-    run_report.sh
+    run_ingest.sh (.ps1 twin)
+    run_silver.sh (.ps1 twin)
+    run_gold.sh (.ps1 twin)
+    run_publish.sh (.ps1 twin)
+    run_quality_gate.sh (.ps1 twin)
+    run_report.sh (.ps1 twin)
+    run_*.py                  # stage entrypoints called by main.py
   dashboard/
     app.py
+    lib/                      # pooled engine, config, charts
     pages/
-      ops.py
+      5_Ops.py
   dotnet-api/                 # optional read-only Gold serving API, see Section 16
     LotusApi/
       Program.cs
@@ -295,6 +304,7 @@ lotus-lakehouse/
     Dockerfile.dashboard
     Dockerfile.report
     Dockerfile.airflow
+    Dockerfile.api
     entrypoint.sh
     postgres/init/
     mongo/init/

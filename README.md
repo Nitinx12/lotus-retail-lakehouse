@@ -17,6 +17,13 @@ $env:PYTHONPATH = "."
 uv run python scripts/init_ops.py
 ```
 
+Gold writers (publish, SQL apply, dbt) connect with the pipeline role,
+which owns the Gold and marts schemas. Dashboard, R, and the API read
+through the pooler with the app role, which sees the masked customer
+view but not the unmasked PII table. Set the pool user and password
+(`POSTGRES_GOLD_POOL_USER`, `POSTGRES_GOLD_POOL_PASSWORD`) for local
+reader runs.
+
 Git hooks live in `.githooks` and are wired with
 `git config core.hooksPath .githooks`, so lint and tests run before every
 commit and push.
