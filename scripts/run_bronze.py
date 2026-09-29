@@ -134,7 +134,7 @@ def main() -> None:
                         log.info("bronze %s skipped rows=%s", name, live)
                         continue
                     start_run(cur, run_id, task)
-                    docs = list(db[name].find())
+                    docs = list(db[name].find().sort("_id", 1))
                     last_id = str(docs[-1].get("_id")) if docs else None
                     df = normalize_frame(pd.DataFrame(docs))
                     rows_in = len(df)
