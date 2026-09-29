@@ -27,6 +27,8 @@ FROM builder AS test
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen
 COPY tests/ ./tests/
+COPY scripts/ ./scripts/
+COPY dashboard/ ./dashboard/
 CMD ["pytest", "tests/unit"]
 
 FROM base AS runtime
