@@ -24,7 +24,7 @@ def resolve_env() -> str:
 
 
 # routes task failures and sla misses to the alert channel
-def notify_on_failure(context: object) -> None:
+def notify_on_failure(context: object, *extra: object) -> None:
     import json
     import urllib.request
 
@@ -35,7 +35,14 @@ def notify_on_failure(context: object) -> None:
             f"run {task.run_id} state {task.state}"
         )
     else:
-        text = f"lotus sla miss: {getattr(context, 'dag_id', context)}"
+        tasks = (
+            [getattr(t, "task_id", t) for t in extra[0]]
+            if extra and isinstance(extra[0], (list, tuple))
+            else []
+        )
+        text = (
+            f"lotus sla miss: dag {getattr(context, 'dag_id', context)} tasks {tasks}"
+        )
     url = os.getenv("SLACK_WEBHOOK_URL", "")
     if url and "CHANGEME" not in url:
         urllib.request.urlopen(
@@ -217,9 +224,7 @@ with DAG(
 
     push = BashOperator(
         task_id="push",
-        bash_command="docker push lotus-pipeline:"
-        + LOTUS_ENV
-        + " && git push origin HEAD",
+        bash_command="docker push lotus-pipeline:" + LOTUS_ENV,
         sla=timedelta(minutes=15),
     )
 
