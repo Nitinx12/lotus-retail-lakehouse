@@ -204,7 +204,7 @@ with DAG(
 
     latex_report = BashOperator(
         task_id="latex_report",
-        bash_command="latexmk -pdf -outdir=reports reports/report.tex",
+        bash_command="test -f reports/report.pdf",
         sla=timedelta(minutes=20),
     )
 

@@ -9,13 +9,13 @@ if (Test-Path -LiteralPath ".env") {
   }
 }
 if (-not $env:LOTUS_ENV) { $env:LOTUS_ENV = "dev" }
-if (-not $env:REPORT_OUTPUT_DIR) { $env:REPORT_OUTPUT_DIR = "output/$($env:LOTUS_ENV)/report" }
+if (-not $env:REPORT_OUTPUT_DIR) { $env:REPORT_OUTPUT_DIR = "../reports" }
 New-Item -ItemType Directory -Path "logs" -Force | Out-Null
 if (-not (Get-Command quarto -ErrorAction SilentlyContinue)) {
-  "quarto not found, skipping report" | Out-File -FilePath "logs/report.log"
-  exit 0
+  "quarto not found, cannot render report" | Out-File -FilePath "logs/report.log"
+  exit 1
 }
-$analysis = Start-Process -FilePath "quarto" -ArgumentList "render", "r/analysis.qmd", "--output-dir", "output/$($env:LOTUS_ENV)/analysis" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "logs/report.log" -RedirectStandardError "logs/report.err"
+$analysis = Start-Process -FilePath "quarto" -ArgumentList "render", "r/analysis.qmd", "--output-dir", "../reports/analysis" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "logs/report.log" -RedirectStandardError "logs/report.err"
 if ($analysis.ExitCode -ne 0) { exit $analysis.ExitCode }
-$report = Start-Process -FilePath "quarto" -ArgumentList "render", "r/report.qmd", "--output-dir", "output/$($env:LOTUS_ENV)/report" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "logs/latex.log" -RedirectStandardError "logs/latex.err"
+$report = Start-Process -FilePath "quarto" -ArgumentList "render", "r/report.qmd", "--output-dir", "../reports" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "logs/latex.log" -RedirectStandardError "logs/latex.err"
 if ($report.ExitCode -ne 0) { exit $report.ExitCode }
