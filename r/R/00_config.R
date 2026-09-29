@@ -19,7 +19,7 @@ mart_returns <- "return_rate_by_product"
 mart_season <- "ramadan_seasonality"
 
 report_currency <- "EGP"
-report_dir <- Sys.getenv("REPORT_OUTPUT_DIR", unset = file.path("output", lotus_env, "report"))
+report_dir <- Sys.getenv("REPORT_OUTPUT_DIR", unset = file.path("..", "reports"))
 
 # returns the first set env var in names, else the default
 db_setting <- function(names, default = "") {
@@ -42,8 +42,8 @@ connect_lotus_db <- function() {
   host <- db_setting(c("POSTGRES_GOLD_POOL_HOST", "POSTGRES_GOLD_HOST", "LOTUS_PGHOST"), "localhost")
   port <- db_setting(c("POSTGRES_GOLD_POOL_PORT", "POSTGRES_GOLD_PORT", "LOTUS_PGPORT"), "6432")
   dbname <- db_setting(c("POSTGRES_GOLD_DB", "LOTUS_PGDATABASE"), "lotus_gold_dev")
-  user <- db_setting(c("POSTGRES_GOLD_USER", "LOTUS_PGUSER"), "lotus_app")
-  password <- db_setting(c("POSTGRES_GOLD_PASSWORD", "LOTUS_PGPASSWORD"), "")
+  user <- db_setting(c("POSTGRES_GOLD_POOL_USER", "POSTGRES_GOLD_USER", "LOTUS_PGUSER"), "lotus_app")
+  password <- db_setting(c("POSTGRES_GOLD_POOL_PASSWORD", "POSTGRES_GOLD_PASSWORD", "LOTUS_PGPASSWORD"), "")
   if (password == "") {
     return(NULL)
   }
