@@ -1,5 +1,6 @@
 # unit tests for scd2 versioning
 import pandas as pd
+import pytest
 
 from src.silver.scd2 import CUSTOMER_TRACKED, apply_scd2, asof_join
 
@@ -73,6 +74,44 @@ def test_change() -> None:
     assert len(out) == 2
     assert sorted(out["customer_sk"].tolist()) == [1, 2]
     assert out["is_current"].tolist() == [False, True]
+
+
+# checks corrupted history with two current rows fails loudly
+def test_duplicate_current_errors() -> None:
+    current = pd.DataFrame(
+        [
+            {
+                "customer_id": "a",
+                "region": "R1",
+                "loyalty_tier": "Gold",
+                "customer_sk": 1,
+                "effective_start_date": "2024-01-01",
+                "effective_end_date": None,
+                "is_current": True,
+                "attribute_hash": "h1",
+            },
+            {
+                "customer_id": "a",
+                "region": "R2",
+                "loyalty_tier": "Gold",
+                "customer_sk": 2,
+                "effective_start_date": "2024-02-01",
+                "effective_end_date": None,
+                "is_current": True,
+                "attribute_hash": "h2",
+            },
+        ]
+    )
+    inc = pd.DataFrame([{"customer_id": "a", "region": "R3", "loyalty_tier": "Gold"}])
+    with pytest.raises(ValueError, match="several current rows"):
+        apply_scd2(
+            current,
+            inc,
+            "customer_id",
+            ["region", "loyalty_tier"],
+            "customer_sk",
+            "2024-03-01",
+        )
 
 
 # checks point in time join resolves the old version

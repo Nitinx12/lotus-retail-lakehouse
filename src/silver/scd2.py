@@ -44,6 +44,12 @@ def apply_scd2(
     table = current.copy()
     max_sk = int(table[sk_col].max())
     cur = table[table["is_current"]].set_index(natural_key)
+    dupes = cur.index[cur.index.duplicated()].unique().tolist()
+    if dupes:
+        raise ValueError(
+            f"scd2 {natural_key} has several current rows "
+            f"for keys={dupes[:5]} count={len(dupes)}"
+        )
     for _, row in fresh.iterrows():
         key = row[natural_key]
         if key not in cur.index:
