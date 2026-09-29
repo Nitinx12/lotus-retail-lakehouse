@@ -14,8 +14,6 @@ public partial class LotusGoldContext : DbContext
 
     public virtual DbSet<Alert> Alerts { get; set; }
 
-    public virtual DbSet<DimCustomer> DimCustomers { get; set; }
-
     public virtual DbSet<DimCustomersMasked> DimCustomersMaskeds { get; set; }
 
     public virtual DbSet<DimDate> DimDates { get; set; }
@@ -65,34 +63,6 @@ public partial class LotusGoldContext : DbContext
                 .HasDefaultValueSql("'warning'::text")
                 .HasColumnName("severity");
             entity.Property(e => e.SourceTask).HasColumnName("source_task");
-        });
-
-        modelBuilder.Entity<DimCustomer>(entity =>
-        {
-            entity
-                .HasNoKey()
-                .ToTable("dim_customers", "gold");
-
-            entity.HasIndex(e => e.IsCurrent, "idx_dim_customers_current").HasFilter("is_current");
-
-            entity.HasIndex(e => e.CustomerId, "idx_dim_customers_customer_id");
-
-            entity.Property(e => e.AttributeHash).HasColumnName("attribute_hash");
-            entity.Property(e => e.BatchId).HasColumnName("_batch_id");
-            entity.Property(e => e.BirthDate).HasColumnName("birth_date");
-            entity.Property(e => e.City).HasColumnName("city");
-            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
-            entity.Property(e => e.CustomerSk).HasColumnName("customer_sk");
-            entity.Property(e => e.EffectiveEndDate).HasColumnName("effective_end_date");
-            entity.Property(e => e.EffectiveStartDate).HasColumnName("effective_start_date");
-            entity.Property(e => e.Email).HasColumnName("email");
-            entity.Property(e => e.FullName).HasColumnName("full_name");
-            entity.Property(e => e.Gender).HasColumnName("gender");
-            entity.Property(e => e.IsCurrent).HasColumnName("is_current");
-            entity.Property(e => e.LoyaltyTier).HasColumnName("loyalty_tier");
-            entity.Property(e => e.Phone).HasColumnName("phone");
-            entity.Property(e => e.Region).HasColumnName("region");
-            entity.Property(e => e.RegistrationDate).HasColumnName("registration_date");
         });
 
         modelBuilder.Entity<DimCustomersMasked>(entity =>
