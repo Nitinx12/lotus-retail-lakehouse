@@ -16,6 +16,12 @@ models:
       - name: revenue
         tests:
           - not_null
+      - name: cost
+        tests:
+          - not_null
+      - name: orders
+        tests:
+          - not_null
 
   - name: return_rate_by_product
     columns:
@@ -30,6 +36,12 @@ models:
       - name: return_rate
         tests:
           - not_null
+      - name: times_ordered
+        tests:
+          - not_null
+      - name: times_returned
+        tests:
+          - not_null
 
   - name: ramadan_seasonality
     columns:
@@ -37,5 +49,8 @@ models:
         tests:
           - not_null
       - name: revenue
+        tests:
+          - not_null
+      - name: orders
         tests:
           - not_null
