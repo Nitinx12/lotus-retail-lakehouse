@@ -219,6 +219,8 @@ jobs:
       - run: docker run --rm lotus-pipeline:ci
       - run: docker build -f docker/Dockerfile.dashboard -t lotus-dashboard:ci .
       - run: docker build -f docker/Dockerfile.report -t lotus-report:ci .
+      - run: docker build -f docker/Dockerfile.airflow -t lotus-airflow:ci .
+      - run: docker build -f docker/Dockerfile.api -t lotus-api:ci .
 
   dotnet-api:
     runs-on: ubuntu-latest
