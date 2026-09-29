@@ -130,14 +130,22 @@ def main() -> None:
                         for name in (
                             "index/02_gold_indexes.sql",
                             "triggers/02_gold_triggers.sql",
+                            "security/masked_views.sql",
                         ):
                             gcur.execute(read_sql(Path(f"sql/{name}")))
                             log.info("publish ensured %s", name)
                         gcur.execute(
-                            "REVOKE ALL ON gold.dim_customers "
-                            "FROM lotus_app, lotus_api_reader"
+                            "DO $$ BEGIN "
+                            "IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'gold' AND tablename = 'dim_customers') THEN "
+                            "REVOKE ALL ON gold.dim_customers FROM lotus_app, lotus_api_reader; "
+                            "GRANT SELECT ON gold.dim_customers TO lotus_pii_reader; "
+                            "END IF; "
+                            "IF EXISTS (SELECT 1 FROM pg_views WHERE schemaname = 'gold' AND viewname = 'dim_customers_masked') THEN "
+                            "GRANT SELECT ON gold.dim_customers_masked TO lotus_app, lotus_bi; "
+                            "END IF; "
+                            "END $$"
                         )
-                        log.info("publish reissued dim_customers revokes")
+                        log.info("publish ensured customer grants")
                 finish_run(cur, run_id, "publish", "success", total, total)
             except Exception as exc:
                 ops.rollback()
