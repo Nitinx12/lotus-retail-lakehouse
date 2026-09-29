@@ -89,6 +89,36 @@ def silver_suite() -> dict[str, int | list[str]]:
     }
 
 
+# opens the gold serving warehouse read only
+def gold_reader() -> psycopg2.extensions.connection:
+    return psycopg2.connect(
+        dsn=build_dsn(
+            os.getenv("POSTGRES_GOLD_HOST", "localhost"),
+            int(os.getenv("POSTGRES_GOLD_PORT", "5432")),
+            os.getenv("POSTGRES_GOLD_DB", "lotus_gold_dev"),
+            os.getenv("POSTGRES_GOLD_USER", "lotus_app"),
+            os.getenv("POSTGRES_GOLD_PASSWORD", ""),
+        ),
+        connect_timeout=5,
+    )
+
+
+# sums the served dbt revenue mart, none when marts are not built yet
+def served_revenue_total() -> float | None:
+    try:
+        with gold_reader() as conn:
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT coalesce(sum(revenue), 0) FROM marts.revenue_by_store_month"
+                )
+                row = cur.fetchone()
+                return float(row[0]) if row else None
+    except psycopg2.Error as exc:
+        log.info("quality served mart check skipped: %s", exc)
+        return None
+
+
 # checks gold keys and mart reconciliation
 def gold_checks(
     facts: pd.DataFrame,
@@ -96,8 +126,15 @@ def gold_checks(
     employees: pd.DataFrame,
     returns: pd.DataFrame,
     revenue: pd.DataFrame,
+    served_revenue: float | None = None,
 ) -> dict[str, int | list[str]]:
     named = facts[facts["employee_id"].notna()]
+    served_ok = (
+        0
+        if served_revenue is None
+        or round(served_revenue, 2) == round(float(revenue["revenue"].sum()), 2)
+        else 1
+    )
     return {
         "customer_sk_covered": check_not_null(facts, ["customer_sk"])["customer_sk"],
         "customers_fk": check_referential(
@@ -110,6 +147,7 @@ def gold_checks(
         "mart_reconciled": 0
         if round(revenue["revenue"].sum(), 2) == round(facts["total_revenue"].sum(), 2)
         else 1,
+        "mart_served_reconciled": served_ok,
     }
 
 
@@ -120,7 +158,9 @@ def gold_suite() -> dict[str, int | list[str]]:
     employees = pd.read_parquet(GOLD_DIR / "dim_employees.parquet")
     returns = pd.read_parquet(GOLD_DIR / "fact_returns.parquet")
     revenue = pd.read_parquet(GOLD_DIR / "mart_revenue_by_store_month.parquet")
-    return gold_checks(facts, customers, employees, returns, revenue)
+    return gold_checks(
+        facts, customers, employees, returns, revenue, served_revenue_total()
+    )
 
 
 # runs all three suites and blocks on failure
