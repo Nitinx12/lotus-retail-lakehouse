@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # runs bronze silver and gold quality suites into ops
 set -euo pipefail
 if [ -f .env ]; then set -a; source .env; set +a; fi

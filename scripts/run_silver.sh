@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # builds cleaned silver parquet from bronze
 set -euo pipefail
 if [ -f .env ]; then set -a; source .env; set +a; fi

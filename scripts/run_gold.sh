@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # builds gold star schema and marts from silver
 set -euo pipefail
 if [ -f .env ]; then set -a; source .env; set +a; fi

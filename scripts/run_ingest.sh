@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # lands mongo collections into bronze parquet
 set -euo pipefail
 if [ -f .env ]; then set -a; source .env; set +a; fi

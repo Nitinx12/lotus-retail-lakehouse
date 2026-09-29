@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # publishes gold parquet into the postgres serving schema
 set -euo pipefail
 if [ -f .env ]; then set -a; source .env; set +a; fi
