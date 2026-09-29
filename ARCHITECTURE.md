@@ -214,6 +214,7 @@ The Streamlit ops page (`dashboard/pages/5_Ops.py`) reads only the ops tables pl
 - **Delta retention.** `VACUUM` runs on a schedule with a retention window long enough to cover the time-travel rollback described in Section 4 (default 7 days, extended for Gold), so cleanup doesn't silently remove the version you'd need to roll back to.
 - **Postgres backups.** Automated daily snapshots plus point-in-time recovery (WAL archiving) on both the Gold database and, critically, the `ops` schema — `ops` is the pipeline's own source of truth for run history and quality results, and losing it blinds the monitoring page even if Gold itself is fine.
 - **Recovery drill.** A documented runbook (`runbooks/restore.md`) for "Gold table corrupted" (Delta time travel restore) and "ops database lost" (PITR restore) scenarios, exercised at least once rather than assumed to work.
+- **Dump scripts.** `scripts/backup_postgres.sh` writes timestamped custom format dumps of Gold and Ops under `data/backups` keeping the last seven per database, preferring the compose postgres and falling back to a local `pg_dump`. `scripts/restore_postgres.sh` reloads one dump file with cleaning of replaced objects. Both write their own log under `logs/` and follow the drill in `runbooks/restore.md`.
 
 ## 14. Compute governance and cost controls
 
@@ -232,6 +233,11 @@ The Streamlit ops page (`dashboard/pages/5_Ops.py`) reads only the ops tables pl
 - Docker image build (not push) to confirm the image still builds.
 
 Merge to `main` promotes through `staging` (Section 11) before a manual/gated promotion to `prod`.
+
+- Shell wrappers ship with the stages: `scripts/run_dbt.sh` for the dbt DAG task, `scripts/run_tests.sh` as the one shot local gate behind `make gate`, and `scripts/data_pipeline_setup.sh` for fresh machine bootstrap. `run_pipeline.bat` carries matching branches on Windows.
+- A shell job runs `bash -n scripts/*.sh` plus `git diff --check`, and the entrypoints job dry runs every Makefile target plus the restore usage guard, so wrapper drift fails fast.
+- Secret scanning runs in `.github/workflows/leaks.yml` on every PR and push to `main`. Static analysis runs in `.github/workflows/codeql.yml` for Actions, C#, and Python on PRs, pushes, and a weekly schedule.
+- `.github/workflows/docker-publish.yml` ships all five images with SBOM plus provenance attestations on merges to `main` and version tags. Dependabot files weekly updates for Python, Actions, and Docker.
 
 ## 16. Optional: C# serving API
 
@@ -277,8 +283,17 @@ lotus-lakehouse/
     run_gold.sh (.ps1 twin)
     run_publish.sh (.ps1 twin)
     run_quality_gate.sh (.ps1 twin)
-    run_report.sh (.ps1 twin)
-    run_*.py                  # stage entrypoints called by main.py
+     run_report.sh (.ps1 twin)
+     run_dbt.sh                  # dbt run and test for the marts
+     run_tests.sh                # one shot local gate into logs/gate.log
+     backup_postgres.sh          # timestamped dumps under data/backups
+     restore_postgres.sh         # reload one dump file
+     data_pipeline_setup.sh      # fresh machine bootstrap
+     health_check.sh             # disk plus port checks then python db checks
+     security.sh                 # secret scan then python pattern checks
+     monitor_logs.sh             # log summary plus retention cleanup
+     inspect_gold_schema.py      # prints gold tables with columns
+     run_*.py                  # stage entrypoints called by main.py
   dashboard/
     app.py
     lib/                      # pooled engine, config, charts
@@ -309,11 +324,13 @@ lotus-lakehouse/
     postgres/init/
     mongo/init/
     mongo/seed.sh
-  .github/workflows/ci.yml
-  .env.example
-  ARCHITECTURE.md
-  README.md
-  CHANGELOG.md
+   .github/workflows/ci.yml
+   .env.example
+   ARCHITECTURE.md
+   README.md
+   CHANGELOG.md
+   docs/                       # per area guides with flow charts
+   .github/workflows/          # ci, codeql, leaks, docker publish
 ```
 
 ## 18. Tech stack summary

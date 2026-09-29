@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+* Add ops shell tooling: fresh machine setup, disk and port health checks,
+  secret scanning, log retention cleanup, gold schema inspector, dbt runner,
+  postgres backup and restore, and a one shot local test gate, all wired
+  into the Makefile and `run_pipeline.bat`.
+* Harden CI with least privilege permissions, per job timeouts, a shell
+  syntax job, and entrypoint dry runs; add CodeQL for Actions C# and
+  Python plus gitleaks secret scanning; publish all five images with SBOM
+  and provenance attestations.
+* Clean `.env` and `.env.example` into banner sections with no value
+  changes, and quote the Databricks host placeholder so sourcing stops
+  erroring.
 * Audit fixes: pipeline test image now ships `scripts` and `dashboard` so the
   container unit run passes; Gold writers default to the pipeline role so
   local publish, SQL apply, and dbt work without overrides; the app role
