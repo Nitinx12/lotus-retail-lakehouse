@@ -10,6 +10,7 @@ $$;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA ops TO lotus_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA gold TO lotus_app;
+REVOKE ALL ON gold.dim_customers FROM lotus_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA marts TO lotus_app;
 GRANT SELECT ON ALL TABLES IN SCHEMA gold TO lotus_api_reader;
 GRANT SELECT ON ALL TABLES IN SCHEMA marts TO lotus_api_reader;

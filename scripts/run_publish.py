@@ -133,6 +133,11 @@ def main() -> None:
                         ):
                             gcur.execute(read_sql(Path(f"sql/{name}")))
                             log.info("publish ensured %s", name)
+                        gcur.execute(
+                            "REVOKE ALL ON gold.dim_customers "
+                            "FROM lotus_app, lotus_api_reader"
+                        )
+                        log.info("publish reissued dim_customers revokes")
                 finish_run(cur, run_id, "publish", "success", total, total)
             except Exception as exc:
                 ops.rollback()

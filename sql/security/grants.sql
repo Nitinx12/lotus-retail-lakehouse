@@ -6,6 +6,7 @@ BEGIN
         WHERE table_schema = 'gold' AND table_name = 'dim_customers'
     ) THEN
         EXECUTE 'REVOKE ALL ON gold.dim_customers FROM PUBLIC';
+        EXECUTE 'REVOKE ALL ON gold.dim_customers FROM lotus_app';
         EXECUTE 'GRANT SELECT ON gold.dim_customers TO lotus_pii_reader';
         EXECUTE 'GRANT SELECT ON gold.dim_customers_masked TO lotus_bi';
         EXECUTE 'GRANT SELECT ON gold.dim_customers_masked TO lotus_app';
