@@ -26,6 +26,7 @@ r/renv/library/
 *.toc
 node_modules
 docker/docker-compose.yml
+__pycache__/
 dotnet-api/**/bin/
 dotnet-api/**/obj/
 dotnet-api/**/TestResults/
