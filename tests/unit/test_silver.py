@@ -100,6 +100,20 @@ def test_clean_customers_drops_null_key() -> None:
     assert out["customer_id"].tolist() == ["a"]
 
 
+# checks the null key goes before dedupe and the last duplicate wins
+def test_clean_customers_null_first_dup_last() -> None:
+    df = pd.DataFrame(
+        [
+            {"customer_id": None, "full_name": "Junk", "gender": "Male", "phone": "0"},
+            {"customer_id": "a", "full_name": "Old", "gender": "Male", "phone": "1"},
+            {"customer_id": "a", "full_name": "New", "gender": "Male", "phone": "2"},
+        ]
+    )
+    out = clean_customers(df)
+    assert out["customer_id"].tolist() == ["a"]
+    assert out["full_name"].iloc[0] == "New"
+
+
 # checks extract metadata never reaches silver
 def test_drop_extract_meta() -> None:
     df = pd.DataFrame([{"a": 1, "loaded_at": "t"}])

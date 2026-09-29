@@ -4,9 +4,9 @@ from __future__ import annotations
 import pandas as pd
 
 
-# drops duplicate rows on the natural key keeping the first
-def dedupe(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
-    return df.drop_duplicates(subset=keys, keep="first").reset_index(drop=True)
+# drops duplicate rows on the natural key keeping the chosen survivor
+def dedupe(df: pd.DataFrame, keys: list[str], keep: str = "first") -> pd.DataFrame:
+    return df.drop_duplicates(subset=keys, keep=keep).reset_index(drop=True)
 
 
 # drops mongo extract metadata that must not reach serving tables
@@ -39,8 +39,8 @@ def normalize_gender(df: pd.DataFrame, col: str = "gender") -> pd.DataFrame:
 # cleans dim_customers fixing dupes, case, phone type, and dates
 def clean_customers(df: pd.DataFrame) -> pd.DataFrame:
     out = drop_extract_meta(df)
-    out = dedupe(out, ["customer_id"])
     out = out[out["customer_id"].notna() & (out["customer_id"] != "")]
+    out = dedupe(out, ["customer_id"], keep="last")
     out = strip_text(out, ["full_name", "city", "region", "loyalty_tier", "email"])
     out = normalize_gender(out)
     out["phone"] = out["phone"].astype("string")
