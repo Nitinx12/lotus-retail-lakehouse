@@ -1,10 +1,18 @@
 DEFAULT_GOAL := help
 
-.PHONY: install lint format test unit smoke dag integration pipeline publish quality sql report dashboard notebooks docker-build docker-up clean help
+.PHONY: install setup lint format test unit smoke dag integration pipeline publish quality sql report dashboard notebooks docker-build docker-up health security inspect dbt backup restore gate clean help
 
 # install project dependencies with uv
 install:
 	uv sync
+
+# bootstrap a fresh machine through the setup script
+setup:
+	bash scripts/data_pipeline_setup.sh
+
+# same setup without starting containers
+setup-deps:
+	bash scripts/data_pipeline_setup.sh --skip-docker
 
 # run ruff and sqlfluff checks same scope as the git hooks
 lint:
@@ -63,11 +71,41 @@ dashboard:
 notebooks:
 	uv run jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=600 notebooks/*.ipynb
 
-# build pipeline dashboard and report images
+# run shell level health checks then python db checks
+health:
+	bash scripts/health_check.sh
+
+# scan for leaked secrets then run python pattern checks
+security:
+	bash scripts/security.sh
+
+# list every table plus column in the postgres gold schema
+inspect:
+	uv run python scripts/inspect_gold_schema.py
+
+# build and test the governed dbt marts
+dbt:
+	bash scripts/run_dbt.sh
+
+# dump gold and ops databases under data/backups
+backup:
+	bash scripts/backup_postgres.sh
+
+# restore one dump file, pass FILE=data/backups/gold_<stamp>.dump
+restore:
+	bash scripts/restore_postgres.sh $(FILE)
+
+# run the full local gate in one shot
+gate:
+	bash scripts/run_tests.sh
+
+# build all service images
 docker-build:
 	docker build -f docker/Dockerfile.pipeline -t lotus-pipeline:local .
 	docker build -f docker/Dockerfile.dashboard -t lotus-dashboard:local .
 	docker build -f docker/Dockerfile.report -t lotus-report:local .
+	docker build -f docker/Dockerfile.airflow -t lotus-airflow:local .
+	docker build -f docker/Dockerfile.api -t lotus-api:local .
 
 # start the docker stack through the env exporting wrapper
 docker-up:
