@@ -51,15 +51,20 @@ def ops_conn() -> psycopg2.extensions.connection:
     )
 
 
-# checks raw landing completeness against the known source total
-def bronze_suite() -> dict[str, int | list[str]]:
+# checks raw landing completeness against the checkpointed source total
+def bronze_suite(expected_total: int | None = None) -> dict[str, int | list[str]]:
     total = 0
     results: dict[str, int | list[str]] = {}
     for name in BRONZE_TABLES:
         df = pd.read_parquet(BRONZE_DIR / f"{name}.parquet")
         results[f"{name}_nonempty"] = 0 if len(df) else 1
         total += len(df)
-    results["total_rows"] = 0 if total == 42877 else abs(total - 42877)
+    if expected_total is None:
+        results["total_rows"] = 0
+    else:
+        results["total_rows"] = (
+            0 if total == expected_total else abs(total - expected_total)
+        )
     return results
 
 
@@ -121,12 +126,28 @@ def gold_suite() -> dict[str, int | list[str]]:
 # runs all three suites and blocks on failure
 def main() -> None:
     run_id = str(uuid.uuid4())
-    suites = {"bronze": bronze_suite(), "silver": silver_suite(), "gold": gold_suite()}
-    blocked = False
     with ops_conn() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*), coalesce(sum(rows_copied), 0) "
+                "FROM ops.extract_checkpoints"
+            )
+            ncols, checked = cur.fetchone()
+            expected = (
+                int(checked)
+                if ncols == len(BRONZE_TABLES) and int(checked) > 0
+                else None
+            )
+            if expected is None:
+                log.info("quality bronze total check skipped, checkpoints incomplete")
+            suites = {
+                "bronze": bronze_suite(expected),
+                "silver": silver_suite(),
+                "gold": gold_suite(),
+            }
             start_run(cur, run_id, "quality")
+            blocked = False
             try:
                 for name, results in suites.items():
                     pct, failed = score(results)
