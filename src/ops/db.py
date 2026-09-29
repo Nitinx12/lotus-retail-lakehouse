@@ -34,7 +34,7 @@ def start_run(cur: object, run_id: str, task: str) -> None:
         "INSERT INTO ops.pipeline_runs (run_id, task_name, status) "
         "VALUES (%s, %s, 'running') "
         "ON CONFLICT (run_id, task_name) DO UPDATE SET "
-        "status = 'running', started_at = now(), ended_at = NULL, "
+        "status = 'running', started_at = clock_timestamp(), ended_at = NULL, "
         "error_message = NULL",
         (run_id, task),
     )
@@ -52,10 +52,10 @@ def finish_run(
 ) -> None:
     cur.execute(
         "INSERT INTO ops.pipeline_runs "
-        "(run_id, task_name, status, rows_in, rows_out, error_message) "
-        "VALUES (%s, %s, %s, %s, %s, %s) "
+        "(run_id, task_name, status, rows_in, rows_out, error_message, ended_at) "
+        "VALUES (%s, %s, %s, %s, %s, %s, clock_timestamp()) "
         "ON CONFLICT (run_id, task_name) DO UPDATE SET "
-        "status = EXCLUDED.status, ended_at = now(), "
+        "status = EXCLUDED.status, ended_at = clock_timestamp(), "
         "rows_in = EXCLUDED.rows_in, rows_out = EXCLUDED.rows_out, "
         "error_message = EXCLUDED.error_message",
         (run_id, task, status, rows_in, rows_out, err),
