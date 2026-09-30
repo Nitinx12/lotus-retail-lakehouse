@@ -51,4 +51,4 @@ Points to remember.
 * 2. Never comment out or skip a failing test to get green. Fix it or note it in the PR.
 * 3. DAG tests catch parse errors and missing retries before Airflow sees them in prod.
 * 4. dbt test runs in CI against a staging like schema, not dev, not prod.
-* 5. Hooks in `.githooks` run lint plus tests on commit and push when wired.
+* 5. CI runs lint plus tests on every push, so verify locally before pushing.

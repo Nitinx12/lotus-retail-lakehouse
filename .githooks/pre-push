@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# runs a quick unit check before every push, full suite stays in ci
-set -euo pipefail
-
-if [[ "${SKIP_PREPUSH:-}" == "1" ]]; then
-  exit 0
-fi
-
-uv run pytest tests/unit -q

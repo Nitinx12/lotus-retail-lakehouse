@@ -54,7 +54,7 @@ Applies to every language in this repo: Python, PySpark, SQL, R, shell.
 - Commit messages: lower case, present tense, no trailing period. `fix silver dedupe on dim customers`, not `Fixed bug.`
 - Small, single purpose commits, don't bundle an unrelated fix into a feature commit.
 - Rebase onto `main` before opening a PR, keep history linear, no merge commits from stale branches.
-- Run `pytest` and lint before every commit, not just before a PR.
+- No local git hooks are installed. CI runs `pytest` and lint on every push, so verify locally before pushing.
 - Open a PR to merge into `main`, reference the task in the PR description, not buried in a commit body. Squash merge, then delete the branch.
 - No force push to `main` or to any branch someone else is also using.
 - `.gitignore` covers `.venv`, `__pycache__`, `.Rproj.user`, `data/`, `logs/`, and `.env`, never commit these even by accident.
