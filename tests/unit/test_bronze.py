@@ -1,5 +1,5 @@
 # unit tests for bronze pure helpers
-import pandas as pd
+from pyspark.sql import SparkSession
 
 from scripts.run_bronze import columns_to_log, needs_reload
 from src.bronze.ingest import (
@@ -11,16 +11,16 @@ from src.bronze.ingest import (
 
 
 # checks _id removal keeps input untouched
-def test_normalize_frame() -> None:
-    df = pd.DataFrame([{"_id": 1, "a": 2}])
+def test_normalize_frame(spark: SparkSession) -> None:
+    df = spark.createDataFrame([{"_id": "x", "a": 2}])
     out = normalize_frame(df)
-    assert list(out.columns) == ["a"]
+    assert out.columns == ["a"]
     assert "_id" in df.columns
 
 
 # checks new column detection
 def test_detect_new_columns() -> None:
-    assert detect_new_columns({"a": "int64"}, {"a": "int64", "b": "object"}) == ["b"]
+    assert detect_new_columns({"a": "int"}, {"a": "int", "b": "string"}) == ["b"]
 
 
 # checks column union order
@@ -29,8 +29,9 @@ def test_merge_columns() -> None:
 
 
 # checks schema capture type
-def test_schema_of() -> None:
-    assert schema_of(pd.DataFrame([{"a": 1}])) == {"a": "int64"}
+def test_schema_of(spark: SparkSession) -> None:
+    df = spark.createDataFrame([{"a": 1}])
+    assert schema_of(df) == {"a": "bigint"}
 
 
 # checks unchanged collections skip the reread
@@ -43,5 +44,5 @@ def test_needs_reload() -> None:
 
 # checks first load logs no schema changes
 def test_columns_to_log() -> None:
-    assert columns_to_log([], {"a": "int64"}) == []
-    assert columns_to_log(["a"], {"a": "int64", "b": "object"}) == ["b"]
+    assert columns_to_log([], {"a": "bigint"}) == []
+    assert columns_to_log(["a"], {"a": "bigint", "b": "string"}) == ["b"]

@@ -6,12 +6,14 @@ import os
 import uuid
 from pathlib import Path
 
-import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 
 from src.ops.db import build_dsn, finish_run, start_run, with_batch
 from src.silver.scd2 import CUSTOMER_TRACKED, EMPLOYEE_TRACKED, apply_scd2
+from src.spark.session import get_spark
 
 load_dotenv()
 
@@ -45,43 +47,53 @@ def ops_conn() -> psycopg2.extensions.connection:
 def version_dim(
     cur: object,
     run_id: str,
-    frame: pd.DataFrame,
+    frame: DataFrame,
     table: str,
     natural_key: str,
     tracked: list[str],
     sk_col: str,
     anchor_date: str,
     change_date: str,
-) -> pd.DataFrame:
-    path = SILVER_DIR / f"{table}_scd2.parquet"
-    current = pd.read_parquet(path) if path.exists() else None
+) -> DataFrame:
+    from pyspark.sql import SparkSession
+
+    session = SparkSession.getActiveSession()
+    assert session is not None
+    path = str(SILVER_DIR / f"{table}_scd2.parquet")
+    current = session.read.parquet(path) if Path(path).exists() else None
     start = anchor_date if current is None else change_date
     task = f"scd2_{table}"
     start_run(cur, run_id, task)
-    out = apply_scd2(
-        current, with_batch(frame, run_id), natural_key, tracked, sk_col, start
+    out = with_batch(
+        apply_scd2(current, frame, natural_key, tracked, sk_col, start), run_id
     )
-    out.to_parquet(path, index=False)
-    versions = int((~out["is_current"]).sum())
-    finish_run(cur, run_id, task, "success", len(frame), len(out))
-    log.info("scd2 %s rows=%s versions_closed=%s", table, len(out), versions)
+    out.write.mode("overwrite").parquet(path)
+    versions = out.filter(F.col("is_current") == False).count()
+    finish_run(cur, run_id, task, "success", frame.count(), out.count())
+    log.info("scd2 %s rows=%s versions_closed=%s", table, out.count(), versions)
     return out
 
 
 # versions both type 2 dimensions
 def main() -> None:
     run_id = str(uuid.uuid4())
-    orders = pd.read_parquet(SILVER_DIR / "fact_orders.parquet")
-    parsed = pd.to_datetime(orders["order_date"])
-    anchor_date = parsed.min().date().isoformat()
-    change_date = parsed.max().date().isoformat()
+    spark = get_spark("lotus-scd2")
+    orders = spark.read.parquet(str(SILVER_DIR / "fact_orders.parquet"))
+    bounds = orders.agg(
+        F.min("order_date").alias("lo"), F.max("order_date").alias("hi")
+    ).collect()[0]
+    anchor_date = str(bounds["lo"])
+    change_date = str(bounds["hi"])
     log.info("scd2 start run=%s anchor=%s", run_id, anchor_date)
     with ops_conn() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
             start_run(cur, run_id, "scd2")
             try:
-                customers = pd.read_parquet(SILVER_DIR / "dim_customers.parquet")
+                customers = spark.read.parquet(
+                    str(SILVER_DIR / "dim_customers.parquet")
+                )
+                n_customers = customers.count()
                 version_dim(
                     cur,
                     run_id,
@@ -93,7 +105,10 @@ def main() -> None:
                     anchor_date,
                     change_date,
                 )
-                employees = pd.read_parquet(SILVER_DIR / "dim_employees.parquet")
+                employees = spark.read.parquet(
+                    str(SILVER_DIR / "dim_employees.parquet")
+                )
+                n_employees = employees.count()
                 version_dim(
                     cur,
                     run_id,
@@ -110,8 +125,8 @@ def main() -> None:
                     run_id,
                     "scd2",
                     "success",
-                    len(customers) + len(employees),
-                    len(customers) + len(employees),
+                    n_customers + n_employees,
+                    n_customers + n_employees,
                 )
             except Exception as exc:
                 conn.rollback()

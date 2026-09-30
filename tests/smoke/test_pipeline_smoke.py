@@ -1,5 +1,5 @@
 # smoke test for the full bronze to gold chain on synthetic rows
-import pandas as pd
+from pyspark.sql import SparkSession
 
 from src.bronze.ingest import normalize_frame
 from src.gold.build import build_fact_orders, mart_revenue_by_store_month
@@ -14,15 +14,15 @@ from src.silver.transforms import (
 
 
 # checks a sampled end to end run preserves every order
-def test_smoke_pipeline() -> None:
-    raw_customers = pd.DataFrame(
+def test_smoke_pipeline(spark: SparkSession) -> None:
+    raw_customers = spark.createDataFrame(
         [
             {
                 "_id": "x",
                 "customer_id": "a",
                 "full_name": "Ann ",
                 "gender": "FEMALE",
-                "phone": 1,
+                "phone": "1",
                 "birth_date": "2000-01-01",
                 "registration_date": "2022-01-01",
                 "city": "Cairo",
@@ -36,7 +36,7 @@ def test_smoke_pipeline() -> None:
     versioned = apply_scd2(
         None, customers, "customer_id", CUSTOMER_TRACKED, "customer_sk", "2022-01-01"
     )
-    employees = pd.DataFrame(
+    employees = spark.createDataFrame(
         [
             {
                 "employee_id": "e1",
@@ -45,10 +45,15 @@ def test_smoke_pipeline() -> None:
                 "effective_end_date": None,
                 "is_current": True,
             }
-        ]
+        ],
+        schema=(
+            "employee_id STRING, employee_sk INT, "
+            "effective_start_date STRING, effective_end_date STRING, "
+            "is_current BOOLEAN"
+        ),
     )
     first = clean_orders(
-        pd.DataFrame(
+        spark.createDataFrame(
             [
                 {
                     "order_id": "o1",
@@ -64,9 +69,9 @@ def test_smoke_pipeline() -> None:
             ]
         )
     )
-    orders = union_orders(first, first.copy())
+    orders = union_orders(first, first)
     enriched = enrich_returns(
-        pd.DataFrame(
+        spark.createDataFrame(
             [
                 {
                     "return_id": "r1",
@@ -78,17 +83,16 @@ def test_smoke_pipeline() -> None:
                 }
             ]
         ),
-        pd.DataFrame(
+        spark.createDataFrame(
             [{"order_id": "o1", "product_id": "p1", "line_total_revenue": 10.0}]
         ),
     )
     facts = build_fact_orders(orders, versioned, employees)
-    assert len(facts) == 1
-    assert facts["customer_sk"].iloc[0] == 1
-    assert len(mart_revenue_by_store_month(facts)) == 1
-    assert check_unique(facts, ["order_id"])["order_id"] == 0
-    pct, failed = score(
-        {"orders_unique": 0, "orphans": int(enriched["return_orphan"].sum())}
-    )
+    assert facts.count() == 1
+    assert facts.collect()[0]["customer_sk"] == 1
+    assert mart_revenue_by_store_month(facts).count() == 1
+    assert check_unique(facts.toPandas(), ["order_id"])["order_id"] == 0
+    orphans = enriched.filter("return_orphan").count()
+    pct, failed = score({"orders_unique": 0, "orphans": orphans})
     assert pct == 100.0
     assert failed == 0

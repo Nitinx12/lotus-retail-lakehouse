@@ -1,17 +1,17 @@
 # pure helpers for the bronze landing step
 from __future__ import annotations
 
-import pandas as pd
+from pyspark.sql import DataFrame
 
 
 # drops mongo internals without mutating the input
-def normalize_frame(df: pd.DataFrame) -> pd.DataFrame:
-    return df.drop(columns=["_id"], errors="ignore")
+def normalize_frame(df: DataFrame) -> DataFrame:
+    return df.drop("_id") if "_id" in df.columns else df
 
 
 # captures column dtypes as plain strings
-def schema_of(df: pd.DataFrame) -> dict[str, str]:
-    return {str(c): str(df[c].dtype) for c in df.columns}
+def schema_of(df: DataFrame) -> dict[str, str]:
+    return {f.name: str(f.dataType.simpleString()) for f in df.schema.fields}
 
 
 # lists columns present now that were absent before

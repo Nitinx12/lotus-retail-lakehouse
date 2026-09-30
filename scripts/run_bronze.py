@@ -7,10 +7,13 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from pyspark import StorageLevel
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType
 
 from src.bronze.ingest import (
     detect_new_columns,
@@ -19,6 +22,7 @@ from src.bronze.ingest import (
     schema_of,
 )
 from src.ops.db import build_dsn, finish_run, start_run, with_batch
+from src.spark.session import get_spark
 
 load_dotenv()
 
@@ -58,12 +62,10 @@ def ops_conn() -> psycopg2.extensions.connection:
 
 
 # reads prior parquet column names when a previous load exists
-def prior_columns(path: Path) -> list[str]:
-    import pyarrow.parquet as pq
-
+def prior_columns(spark: SparkSession, path: Path) -> list[str]:
     if not path.exists():
         return []
-    return list(pq.read_schema(path).names)
+    return list(spark.read.parquet(str(path)).columns)
 
 
 # records one pipeline run row
@@ -105,6 +107,38 @@ def read_checkpoint(cur: object, name: str) -> int | None:
     return int(row[0]) if row else None
 
 
+# reads the latest object id for checkpoint tracking
+def read_last_id(collection: object) -> str | None:
+    last = list(collection.find().sort("_id", -1).limit(1))
+    return str(last[0].get("_id")) if last else None
+
+
+# reads one collection in bounded chunks keeping driver memory flat
+def read_collection_chunked(spark: SparkSession, collection: object, chunk: int = 5000):
+    frame = None
+    batch: list[dict] = []
+    cursor = collection.find().sort("_id", 1).batch_size(chunk)
+    for doc in cursor:
+        doc["_id"] = str(doc.get("_id"))
+        batch.append(doc)
+        if len(batch) >= chunk:
+            part = normalize_frame(spark.createDataFrame(batch))
+            frame = (
+                part
+                if frame is None
+                else frame.unionByName(part, allowMissingColumns=True)
+            )
+            batch = []
+    if batch:
+        part = normalize_frame(spark.createDataFrame(batch))
+        frame = (
+            part if frame is None else frame.unionByName(part, allowMissingColumns=True)
+        )
+    if frame is None:
+        return spark.createDataFrame([], StructType([]))
+    return frame
+
+
 # lands every mongo collection into bronze parquet
 def main() -> None:
     BRONZE_DIR.mkdir(parents=True, exist_ok=True)
@@ -115,6 +149,7 @@ def main() -> None:
     collections = sorted(db.list_collection_names())
     run_id = str(uuid.uuid4())
     started = datetime.now(UTC)
+    spark = get_spark("lotus-bronze")
     log.info("bronze start db=%s collections=%s", db_name, collections)
     total = 0
     with ops_conn() as conn:
@@ -134,11 +169,12 @@ def main() -> None:
                         log.info("bronze %s skipped rows=%s", name, live)
                         continue
                     start_run(cur, run_id, task)
-                    docs = list(db[name].find().sort("_id", 1))
-                    last_id = str(docs[-1].get("_id")) if docs else None
-                    df = normalize_frame(pd.DataFrame(docs))
-                    rows_in = len(df)
-                    prev = prior_columns(path)
+                    df = read_collection_chunked(spark, db[name], chunk=5000).persist(
+                        StorageLevel.MEMORY_AND_DISK
+                    )
+                    rows_in = df.count()
+                    last_id = read_last_id(db[name])
+                    prev = prior_columns(spark, path)
                     curr_schema = schema_of(df)
                     for col in columns_to_log(prev, curr_schema):
                         cur.execute(
@@ -146,9 +182,15 @@ def main() -> None:
                             (f"bronze.{name}", col, "add_column"),
                         )
                     if prev:
-                        df = df.reindex(columns=merge_columns(prev, list(df.columns)))
-                    df = with_batch(df, run_id)
-                    df.to_parquet(path, index=False)
+                        target = merge_columns(prev, list(df.columns))
+                        for col in target:
+                            if col not in df.columns:
+                                df = df.withColumn(col, F.lit(None))
+                        df = df.select(*target)
+                    with_batch(df, run_id).write.mode("overwrite").option(
+                        "mergeSchema", "true"
+                    ).parquet(str(path))
+                    df.unpersist()
                     cur.execute(
                         "INSERT INTO ops.extract_checkpoints (source_collection, last_object_id, last_loaded_at, rows_copied, updated_at) VALUES (%s, %s, %s, %s, now()) ON CONFLICT (source_collection) DO UPDATE SET last_object_id = EXCLUDED.last_object_id, last_loaded_at = EXCLUDED.last_loaded_at, rows_copied = EXCLUDED.rows_copied, updated_at = now()",
                         (name, last_id, started, rows_in),
