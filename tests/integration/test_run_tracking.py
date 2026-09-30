@@ -24,6 +24,8 @@ def ops_conn():
 
 # checks a crashed stage still leaves its failed row behind
 def test_failed_run_persists(monkeypatch) -> None:
+    from pyspark.sql.readwriter import DataFrameReader
+
     import scripts.run_silver as silver
 
     marker = f"boom-{uuid.uuid4()}"
@@ -31,7 +33,7 @@ def test_failed_run_persists(monkeypatch) -> None:
     def _boom(*args, **kwargs):
         raise RuntimeError(marker)
 
-    monkeypatch.setattr("pandas.read_parquet", _boom)
+    monkeypatch.setattr(DataFrameReader, "parquet", _boom)
     with pytest.raises(RuntimeError):
         silver.main()
     conn = ops_conn()
