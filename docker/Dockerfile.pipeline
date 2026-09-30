@@ -24,6 +24,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 FROM builder AS test
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends default-jre-headless \
+ && rm -rf /var/lib/apt/lists/*
+ENV JAVA_HOME=/usr/lib/jvm/default-java
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen
 COPY tests/ ./tests/
