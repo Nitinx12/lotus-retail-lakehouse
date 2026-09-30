@@ -8,6 +8,7 @@ from pathlib import Path
 
 import psycopg2
 from dotenv import load_dotenv
+from pyspark import StorageLevel
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
@@ -64,14 +65,18 @@ def version_dim(
     start = anchor_date if current is None else change_date
     task = f"scd2_{table}"
     start_run(cur, run_id, task)
-    out = with_batch(
+    rows_in = frame.count()
+    stamped = with_batch(
         apply_scd2(current, frame, natural_key, tracked, sk_col, start), run_id
-    )
-    out.write.mode("overwrite").parquet(path)
-    versions = out.filter(F.col("is_current") == False).count()
-    finish_run(cur, run_id, task, "success", frame.count(), out.count())
-    log.info("scd2 %s rows=%s versions_closed=%s", table, out.count(), versions)
-    return out
+    ).persist(StorageLevel.MEMORY_AND_DISK)
+    total = stamped.count()
+    stamped.write.mode("overwrite").parquet(path)
+    stamped.unpersist()
+    fresh = session.read.parquet(path)
+    versions = fresh.filter(F.col("is_current") == False).count()
+    finish_run(cur, run_id, task, "success", rows_in, total)
+    log.info("scd2 %s rows=%s versions_closed=%s", table, total, versions)
+    return fresh
 
 
 # versions both type 2 dimensions

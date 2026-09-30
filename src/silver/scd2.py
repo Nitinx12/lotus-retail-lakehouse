@@ -27,6 +27,18 @@ def drop_batch(df: DataFrame) -> DataFrame:
     )
 
 
+# coerces legacy effective dates to date for compatible unions
+def normalize_dates(df: DataFrame) -> DataFrame:
+    out = df
+    if "effective_start_date" in out.columns:
+        out = out.withColumn(
+            "effective_start_date", safe_to_date("effective_start_date")
+        )
+    if "effective_end_date" in out.columns:
+        out = out.withColumn("effective_end_date", safe_to_date("effective_end_date"))
+    return out
+
+
 # merges incoming rows into a versioned scd2 table
 def apply_scd2(
     current: DataFrame | None,
@@ -38,7 +50,7 @@ def apply_scd2(
 ) -> DataFrame:
     incoming = drop_batch(incoming)
     if current is not None:
-        current = drop_batch(current)
+        current = normalize_dates(drop_batch(current))
     fresh = dedupe_incoming(incoming, natural_key)
     fresh = fresh.withColumn(HASH_COL, attribute_hash(fresh, tracked))
     if current is None or current.limit(1).count() == 0:
