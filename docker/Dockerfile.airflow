@@ -1,5 +1,5 @@
 ARG AIRFLOW_VERSION=2.10.5
-FROM apache/airflow:${AIRFLOW_VERSION}
+FROM apache/airflow:${AIRFLOW_VERSION} AS runtime
 ARG AIRFLOW_VERSION
 USER airflow
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \

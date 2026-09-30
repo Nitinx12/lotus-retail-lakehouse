@@ -7,15 +7,15 @@ uv run ruff format --check .
 
 sql_files=$(git diff --cached --name-only -- '*.sql' || true)
 if [[ -n "$sql_files" ]]; then
-  uv run sqlfluff lint $sql_files
+  echo "$sql_files" | xargs uv run sqlfluff lint
 fi
 
-if git diff --cached --name-only | grep -qx '\.env'; then
+if git diff --cached --name-only | grep -Eq '(^|/)\.env$'; then
   echo ".env is staged, remove it before committing"
   exit 1
 fi
 
 md_files=$(git diff --cached --name-only -- '*.md' || true)
-if [[ -n "$md_files" ]] && grep -nE '[a-zA-Z]-[a-zA-Z]' $md_files > /dev/null 2>&1; then
+if [[ -n "$md_files" ]] && echo "$md_files" | xargs grep -nE '[a-zA-Z]-[a-zA-Z]' > /dev/null 2>&1; then
   echo "warning: possible hyphen in prose in: $md_files"
 fi

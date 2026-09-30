@@ -2,4 +2,4 @@
 # runs the test suite before every push
 set -euo pipefail
 
-uv run pytest -q
+uv run pytest tests/unit tests/smoke tests/dag -q

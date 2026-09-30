@@ -33,7 +33,7 @@ jobs:
             target: runtime
           - name: lotus-airflow
             dockerfile: docker/Dockerfile.airflow
-            target: ""
+            target: runtime
           - name: lotus-api
             dockerfile: docker/Dockerfile.api
             target: runtime
