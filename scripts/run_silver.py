@@ -6,9 +6,10 @@ import os
 import uuid
 from pathlib import Path
 
-import pandas as pd
 import psycopg2
 from dotenv import load_dotenv
+from pyspark import StorageLevel
+from pyspark.sql import DataFrame
 
 from src.ops.db import build_dsn, finish_run, start_run, with_batch
 from src.silver.transforms import (
@@ -19,6 +20,7 @@ from src.silver.transforms import (
     enrich_returns,
     union_orders,
 )
+from src.spark.session import get_spark
 
 load_dotenv()
 
@@ -51,14 +53,17 @@ def ops_conn() -> psycopg2.extensions.connection:
 
 
 # writes one frame and records its run row
-def land(cur: object, run_id: str, name: str, df: pd.DataFrame, rows_in: int) -> None:
+def land(cur: object, run_id: str, name: str, df: DataFrame, rows_in: int) -> int:
     task = f"silver_{name}"
     start_run(cur, run_id, task)
-    path = SILVER_DIR / f"{name}.parquet"
-    df = with_batch(df, run_id)
-    df.to_parquet(path, index=False)
-    finish_run(cur, run_id, task, "success", rows_in, len(df))
-    log.info("silver %s rows_in=%s rows_out=%s", name, rows_in, len(df))
+    path = str(SILVER_DIR / f"{name}.parquet")
+    stamped = with_batch(df, run_id).persist(StorageLevel.MEMORY_AND_DISK)
+    rows_out = stamped.count()
+    stamped.write.mode("overwrite").parquet(path)
+    stamped.unpersist()
+    finish_run(cur, run_id, task, "success", rows_in, rows_out)
+    log.info("silver %s rows_in=%s rows_out=%s", name, rows_in, rows_out)
+    return rows_out
 
 
 # runs every silver build in dependency order
@@ -67,22 +72,27 @@ def main() -> None:
     log.info("silver start run=%s", run_id)
     total_in = 0
     total_out = 0
+    spark = get_spark("lotus-silver")
     with ops_conn() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
             start_run(cur, run_id, "silver")
             try:
-                customers = pd.read_parquet(BRONZE_DIR / "dim_customers.parquet")
-                out = clean_customers(customers)
-                total_in += len(customers)
-                total_out += len(out)
-                land(cur, run_id, "dim_customers", out, len(customers))
+                customers = spark.read.parquet(
+                    str(BRONZE_DIR / "dim_customers.parquet")
+                )
+                rows_in = customers.count()
+                total_in += rows_in
+                total_out += land(
+                    cur, run_id, "dim_customers", clean_customers(customers), rows_in
+                )
 
-                products = pd.read_parquet(BRONZE_DIR / "dim_products.parquet")
-                out = clean_products(products)
-                total_in += len(products)
-                total_out += len(out)
-                land(cur, run_id, "dim_products", out, len(products))
+                products = spark.read.parquet(str(BRONZE_DIR / "dim_products.parquet"))
+                rows_in = products.count()
+                total_in += rows_in
+                total_out += land(
+                    cur, run_id, "dim_products", clean_products(products), rows_in
+                )
 
                 for name in (
                     "dim_stores",
@@ -91,33 +101,45 @@ def main() -> None:
                     "fact_order_details",
                 ):
                     df = drop_extract_meta(
-                        pd.read_parquet(BRONZE_DIR / f"{name}.parquet")
+                        spark.read.parquet(str(BRONZE_DIR / f"{name}.parquet"))
                     )
-                    total_in += len(df)
-                    total_out += len(df)
-                    land(cur, run_id, name, df, len(df))
+                    rows_in = df.count()
+                    total_in += rows_in
+                    total_out += land(cur, run_id, name, df, rows_in)
 
                 first = clean_orders(
-                    pd.read_parquet(BRONZE_DIR / "fact_orders_2022_2023.parquet")
-                )
+                    spark.read.parquet(
+                        str(BRONZE_DIR / "fact_orders_2022_2023.parquet")
+                    )
+                ).persist(StorageLevel.MEMORY_AND_DISK)
                 second = clean_orders(
-                    pd.read_parquet(BRONZE_DIR / "fact_orders_2024.parquet")
-                )
+                    spark.read.parquet(str(BRONZE_DIR / "fact_orders_2024.parquet"))
+                ).persist(StorageLevel.MEMORY_AND_DISK)
+                n_first = first.count()
+                n_second = second.count()
                 orders = union_orders(first, second)
-                total_in += len(first) + len(second)
-                total_out += len(orders)
-                land(cur, run_id, "fact_orders", orders, len(first) + len(second))
+                first.unpersist()
+                second.unpersist()
+                total_in += n_first + n_second
+                total_out += land(
+                    cur, run_id, "fact_orders", orders, n_first + n_second
+                )
 
                 returns = drop_extract_meta(
-                    pd.read_parquet(BRONZE_DIR / "fact_returns.parquet")
+                    spark.read.parquet(str(BRONZE_DIR / "fact_returns.parquet"))
                 )
                 details = drop_extract_meta(
-                    pd.read_parquet(BRONZE_DIR / "fact_order_details.parquet")
+                    spark.read.parquet(str(BRONZE_DIR / "fact_order_details.parquet"))
                 )
-                enriched = enrich_returns(returns, details)
-                total_in += len(returns)
-                total_out += len(enriched)
-                land(cur, run_id, "fact_returns", enriched, len(returns))
+                n_returns = returns.count()
+                total_in += n_returns
+                total_out += land(
+                    cur,
+                    run_id,
+                    "fact_returns",
+                    enrich_returns(returns, details),
+                    n_returns,
+                )
 
                 finish_run(cur, run_id, "silver", "success", total_in, total_out)
             except Exception as exc:

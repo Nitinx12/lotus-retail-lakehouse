@@ -2,6 +2,7 @@
 from unittest.mock import MagicMock
 
 import pandas as pd
+from pyspark.sql import SparkSession
 
 from src.ops.db import build_dsn, finish_run, start_run, with_batch
 
@@ -20,6 +21,15 @@ def test_with_batch() -> None:
     out = with_batch(df, "run-1")
     assert out["_batch_id"].tolist() == ["run-1", "run-1"]
     assert "_batch_id" not in df.columns
+
+
+# checks restamping overwrites a stale batch id on spark frames
+def test_with_batch_spark_overwrites(spark: SparkSession) -> None:
+    df = spark.createDataFrame([{"a": 1, "_batch_id": "old"}])
+    out = with_batch(df, "run-2")
+    rows = out.collect()
+    assert [c for c in out.columns if c.startswith("_batch_id")] == ["_batch_id"]
+    assert rows[0]["_batch_id"] == "run-2"
 
 
 # checks running row sql carries the task name

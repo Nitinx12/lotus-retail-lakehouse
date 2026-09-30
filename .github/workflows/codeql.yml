@@ -1,12 +1,15 @@
 name: codeql
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: '0 6 * * 1'
+  # Push, PR, and scheduled triggers stay off until code scanning is enabled
+  # on this private repo, which needs paid Advanced Security. Re-enable them
+  # the day it is purchased or the repo goes public:
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
+  # schedule:
+  #   - cron: '0 6 * * 1'
   workflow_dispatch:
 
 permissions:

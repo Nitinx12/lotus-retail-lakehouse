@@ -4,8 +4,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pandas as pd
-
 
 # builds a libpq dsn from parts
 def build_dsn(host: str, port: int, db: str, user: str, password: str) -> str:
@@ -63,7 +61,14 @@ def finish_run(
 
 
 # stamps every row with the producing run id
-def with_batch(df: pd.DataFrame, run_id: str) -> pd.DataFrame:
-    out = df.copy()
+def with_batch(df: object, run_id: str) -> object:
+    if hasattr(df, "withColumn"):
+        from pyspark.sql import functions as _F
+
+        frame = df
+        if "_batch_id" in df.columns:  # type: ignore[union-attr]
+            frame = df.drop("_batch_id")  # type: ignore[union-attr]
+        return frame.withColumn("_batch_id", _F.lit(run_id))  # type: ignore[union-attr]
+    out = df.copy()  # type: ignore[union-attr]
     out["_batch_id"] = run_id
     return out

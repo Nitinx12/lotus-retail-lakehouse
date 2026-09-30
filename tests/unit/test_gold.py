@@ -1,5 +1,5 @@
 # unit tests for gold builders
-import pandas as pd
+from pyspark.sql import SparkSession
 
 from src.gold.build import (
     build_fact_orders,
@@ -11,8 +11,8 @@ from src.gold.build import (
 
 
 # checks as of resolution picks the old customer version
-def test_build_fact_orders() -> None:
-    orders = pd.DataFrame(
+def test_build_fact_orders(spark: SparkSession) -> None:
+    orders = spark.createDataFrame(
         [
             {
                 "order_id": "o1",
@@ -25,7 +25,7 @@ def test_build_fact_orders() -> None:
             }
         ]
     )
-    customers = pd.DataFrame(
+    customers = spark.createDataFrame(
         [
             {
                 "customer_id": "a",
@@ -45,7 +45,7 @@ def test_build_fact_orders() -> None:
             },
         ]
     )
-    employees = pd.DataFrame(
+    employees = spark.createDataFrame(
         [
             {
                 "employee_id": "e1",
@@ -53,16 +53,20 @@ def test_build_fact_orders() -> None:
                 "effective_start_date": "2024-01-01",
                 "effective_end_date": None,
             }
-        ]
+        ],
+        schema=(
+            "employee_id STRING, employee_sk INT, "
+            "effective_start_date STRING, effective_end_date STRING"
+        ),
     )
-    out = build_fact_orders(orders, customers, employees)
-    assert out["customer_sk"].iloc[0] == 1
-    assert out["employee_sk"].iloc[0] == 7
+    row = build_fact_orders(orders, customers, employees).collect()[0]
+    assert row["customer_sk"] == 1
+    assert row["employee_sk"] == 7
 
 
 # checks orders survive when no employee version covers the date
-def test_build_fact_orders_keeps_unresolved_employee() -> None:
-    orders = pd.DataFrame(
+def test_build_fact_orders_keeps_unresolved_employee(spark: SparkSession) -> None:
+    orders = spark.createDataFrame(
         [
             {
                 "order_id": "o1",
@@ -75,7 +79,7 @@ def test_build_fact_orders_keeps_unresolved_employee() -> None:
             }
         ]
     )
-    customers = pd.DataFrame(
+    customers = spark.createDataFrame(
         [
             {
                 "customer_id": "a",
@@ -85,9 +89,14 @@ def test_build_fact_orders_keeps_unresolved_employee() -> None:
                 "effective_end_date": None,
                 "is_current": True,
             }
-        ]
+        ],
+        schema=(
+            "customer_id STRING, customer_sk INT, region STRING, "
+            "effective_start_date STRING, effective_end_date STRING, "
+            "is_current BOOLEAN"
+        ),
     )
-    employees = pd.DataFrame(
+    employees = spark.createDataFrame(
         [
             {
                 "employee_id": "e1",
@@ -95,27 +104,30 @@ def test_build_fact_orders_keeps_unresolved_employee() -> None:
                 "effective_start_date": "2024-06-01",
                 "effective_end_date": None,
             }
-        ]
+        ],
+        schema=(
+            "employee_id STRING, employee_sk INT, "
+            "effective_start_date STRING, effective_end_date STRING"
+        ),
     )
-    out = build_fact_orders(orders, customers, employees)
-    assert len(out) == 1
-    assert out["customer_sk"].iloc[0] == 1
-    assert pd.isna(out["employee_sk"].iloc[0])
+    rows = build_fact_orders(orders, customers, employees).collect()
+    assert len(rows) == 1
+    assert rows[0]["customer_sk"] == 1
+    assert rows[0]["employee_sk"] is None
 
 
 # checks returns inherit order keys
-def test_build_fact_returns() -> None:
-    rets = pd.DataFrame([{"return_id": "r1", "order_id": "o1"}])
-    orders = pd.DataFrame(
+def test_build_fact_returns(spark: SparkSession) -> None:
+    rets = spark.createDataFrame([{"return_id": "r1", "order_id": "o1"}])
+    orders = spark.createDataFrame(
         [{"order_id": "o1", "customer_sk": 1, "employee_sk": 7, "store_id": 1}]
     )
-    out = build_fact_returns(rets, orders)
-    assert out["customer_sk"].iloc[0] == 1
+    assert build_fact_returns(rets, orders).collect()[0]["customer_sk"] == 1
 
 
 # checks monthly revenue math
-def test_revenue_mart() -> None:
-    orders = pd.DataFrame(
+def test_revenue_mart(spark: SparkSession) -> None:
+    orders = spark.createDataFrame(
         [
             {
                 "order_id": "o1",
@@ -133,27 +145,28 @@ def test_revenue_mart() -> None:
             },
         ]
     )
-    out = mart_revenue_by_store_month(orders)
-    assert out["revenue"].iloc[0] == 30.0
-    assert out["orders"].iloc[0] == 2
+    row = mart_revenue_by_store_month(orders).collect()[0]
+    assert row["revenue"] == 30.0
+    assert row["orders"] == 2
 
 
 # checks return rate math
-def test_return_rate_mart() -> None:
-    det = pd.DataFrame(
+def test_return_rate_mart(spark: SparkSession) -> None:
+    det = spark.createDataFrame(
         [
             {"order_id": "o1", "product_id": "p1"},
             {"order_id": "o2", "product_id": "p1"},
             {"order_id": "o2", "product_id": "p2"},
         ]
     )
-    out = mart_return_rate_by_product(det, pd.Series(["o1"]))
-    assert out.set_index("product_id").loc["p1", "return_rate"] == 0.5
+    out = mart_return_rate_by_product(det, ["o1"]).collect()
+    by_product = {r["product_id"]: r for r in out}
+    assert by_product["p1"]["return_rate"] == 0.5
 
 
 # checks ramadan split columns
-def test_ramadan_mart() -> None:
-    orders = pd.DataFrame(
+def test_ramadan_mart(spark: SparkSession) -> None:
+    orders = spark.createDataFrame(
         [
             {
                 "order_id": "o1",
@@ -163,6 +176,5 @@ def test_ramadan_mart() -> None:
             }
         ]
     )
-    dates = pd.DataFrame([{"date_id": 20240315, "is_ramadan": 1}])
-    out = mart_ramadan_seasonality(orders, dates)
-    assert out["is_ramadan"].iloc[0] == 1
+    dates = spark.createDataFrame([{"date_id": 20240315, "is_ramadan": 1}])
+    assert mart_ramadan_seasonality(orders, dates).collect()[0]["is_ramadan"] == 1
